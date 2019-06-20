@@ -1,6 +1,9 @@
 [package]
 name = "merino"
 version = "0.1.0"
+description = "A SOCKS5 Proxy server written in Rust"
+repository = "https://github.com/ajmwagar/merino"
+readme = "README.md"
 authors = ["Avery Wagar <ajmw.subs@gmail.com>"]
 edition = "2018"
 
