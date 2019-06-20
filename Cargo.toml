@@ -1,13 +1,13 @@
 [package]
-name = "wool"
+name = "merino"
 version = "0.1.0"
 authors = ["Avery Wagar <ajmw.subs@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-openssl = { version = "0.10", features = ["vendored"] }
-rand = "0.6.5"
-rayon = "1.0"
+# openssl = { version = "0.10", features = ["vendored"] }
+# rayon = "1.0"
 pretty_env_logger = "0.3.0"
 log = "*"
 structopt = "0.2"
+snafu = "0.4.1"
