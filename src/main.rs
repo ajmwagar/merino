@@ -20,9 +20,9 @@ A SOCKS5 Proxy written in Rust
 #[structopt(name = "merino")]
 /// A SOCKS5 Proxy written in Rust
 struct Opt {
-    /// Set port to listen on
     #[structopt(short = "p", long = "port", default_value = "1080")]
-    port: u16,
+    /// Set port to listen on
+    port: u16
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -35,14 +35,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         env::set_var("RUST_LOG", "merino=INFO");
     }
 
-
     pretty_env_logger::init_timed();
-
     
     let mut merino = Merino::new(opt.port)?;
 
     merino.serve()?;
-
 
     Ok(())
 }
