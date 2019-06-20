@@ -6,19 +6,28 @@ use merino::*;
 use std::error::Error;
 use std::env;
 
+const LOGO: &str = r"
+                     _
+ _ __ ___   ___ _ __(_)_ __   ___
+| '_ ` _ \ / _ \ '__| | '_ \ / _ \
+| | | | | |  __/ |  | | | | | (_) |
+|_| |_| |_|\___|_|  |_|_| |_|\___/
+
+A SOCKS5 Proxy written in Rust
+";
+
 #[derive(StructOpt, Debug)]
 #[structopt(name = "merino")]
+/// A SOCKS5 Proxy written in Rust
 struct Opt {
-    /// Activate ssl mode
-    #[structopt(long = "ssl")]
-    ssl: bool,
-
     /// Set port to listen on
     #[structopt(short = "p", long = "port", default_value = "1080")]
     port: u16,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    println!("{}", LOGO);
+
     let opt = Opt::from_args();
 
     //Set the `RUST_LOG` var if none is provided
@@ -26,9 +35,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         env::set_var("RUST_LOG", "merino=INFO");
     }
 
+
     pretty_env_logger::init_timed();
 
-    let mut merino = Merino::new()?;
+    
+    let mut merino = Merino::new(opt.port)?;
 
     merino.serve()?;
 
