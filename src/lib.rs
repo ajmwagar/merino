@@ -47,6 +47,7 @@ enum ResponseCode {
 }
 
 /// DST.addr variant types
+#[derive(PartialEq)]
 enum AddrType {
     V4 = 0x01,
     Domain = 0x03,
@@ -256,6 +257,9 @@ impl SOCKClient {
         // loop {
             // Parse Request
             let req = SOCKSReq::from_stream(&mut self.stream)?;
+            
+            if req.addr_type == AddrType::V6 {
+            }
 
             // Log Request
             let displayed_addr = pretty_print_addr(&req.addr_type, &req.addr);
@@ -362,11 +366,11 @@ impl SOCKClient {
 fn addr_to_socket(addr_type: &AddrType, addr: &Vec<u8>, port: u16) -> SocketAddr {
     match addr_type {
         AddrType::V6 => {
+            let new_addr = (0..8).into_iter().map(|x| {
+                trace!("{} and {}", x * 2, (x * 2) + 1);
+                ((addr[(x * 2)] as u16) << 8) | addr[(x * 2) + 1] as u16
+            }).collect::<Vec<u16>>();
 
-            let mut new_addr = [0u16; 8];
-            for i in 0..8 {
-                new_addr[i] = ((addr[i] as u16) << 8) | addr[i + 1] as u16;
-            }
 
             SocketAddr::from(
                 SocketAddrV6::new(
@@ -400,7 +404,11 @@ fn pretty_print_addr(addr_type: &AddrType, addr: &Vec<u8>) -> String {
             addr.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(".")
         },
         AddrType::V6 => {
-            addr.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(":")
+            let addr_16 = (0..8).into_iter().map(|x| {
+                ((addr[(x * 2)] as u16) << 8) | addr[(x * 2) + 1] as u16
+            }).collect::<Vec<u16>>();
+
+            addr_16.iter().map(|x| format!("{:x}", x)).collect::<Vec<String>>().join(":")
         }
     }
 }
