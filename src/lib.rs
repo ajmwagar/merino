@@ -1,3 +1,4 @@
+#[macro_use] extern crate serde_derive;
 #[macro_use] extern crate log;
 use snafu::{Snafu};
 
@@ -30,6 +31,13 @@ const SOCKS5_IP: &str = "127.0.0.1";
 //     Io(Box<dyn Error>),
 //     Generic(String)
 // }
+
+#[derive(Debug, PartialEq, Deserialize)]
+pub struct User {
+    username: String,
+    password: String
+}
+
 
 #[derive(Debug, Snafu)]
 /// Possible SOCKS5 Response Codes
@@ -112,7 +120,7 @@ impl SockCommand {
 // }
 
 /// Client Authentication Methods
-enum AuthMethods {
+pub enum AuthMethods {
     /// No Authentication
     NoAuth = 0x00,
     // GssApi = 0x01,
@@ -124,14 +132,18 @@ enum AuthMethods {
 
 pub struct Merino {
     listener: TcpListener,
+    // users: ,
+    auth_methods: Vec<u8>
 }
 
 impl Merino {
     /// Create a new Merino instance
-    pub fn new(port: u16) -> Result<Self, Box<dyn Error>> {
+    pub fn new(port: u16,  auth_methods: Vec<u8>) -> Result<Self, Box<dyn Error>> {
         info!("Listening on {}:{}", SOCKS5_IP, port);
         Ok(Merino {
-            listener: TcpListener::bind(format!("{}:{}", SOCKS5_IP, port))?
+            listener: TcpListener::bind(format!("{}:{}", SOCKS5_IP, port))?,
+            auth_methods
+
         })
     }
 
@@ -140,7 +152,8 @@ impl Merino {
         loop {
             match self.listener.accept() {
                 Ok((stream, _remote)) => {
-                    let mut client = SOCKClient::new(stream);
+                    // TODO Optimize this
+                    let mut client = SOCKClient::new(stream, self.auth_methods.clone());
                     thread::spawn(move || {
                         match client.init() {
                             Ok(_) => {},
@@ -168,16 +181,18 @@ impl Merino {
 struct SOCKClient {
     stream: TcpStream,
     auth_nmethods: u8,
+    auth_methods: Vec<u8>,
     socks_version: u8
 }
 
 impl SOCKClient {
     /// Create a new SOCKClient
-    pub fn new(stream: TcpStream) -> Self {
+    pub fn new(stream: TcpStream, auth_methods: Vec<u8>) -> Self {
         SOCKClient {
             stream,
             auth_nmethods: 0,
-            socks_version: 0
+            socks_version: 0,
+            auth_methods
         }
     }
 
@@ -207,7 +222,7 @@ impl SOCKClient {
         // Handle SOCKS4 requests
         if header[0] != SOCKS_VERSION {
             warn!("Init: Unsupported version: SOCKS{}", self.socks_version);
-            self.stream.shutdown(Shutdown::Both)?;
+            self.shutdown()?;
         }
         // Valid SOCKS5
         else {
@@ -282,7 +297,7 @@ impl SOCKClient {
                 self.stream.write(&response)?;
 
                 // Shutdown 
-                self.stream.shutdown(Shutdown::Both)?;
+                self.shutdown()?;
 
             }
 
@@ -297,7 +312,7 @@ impl SOCKClient {
             warn!("No Suitable Auth method: {:?}", methods);
             response[1] = AuthMethods::NoMethods as u8;
             self.stream.write(&response)?;
-            self.stream.shutdown(Shutdown::Both)?;
+            // self.shutdown()?;
         }
 
 
@@ -383,7 +398,9 @@ impl SOCKClient {
         for _ in 0..self.auth_nmethods {
             let mut method = [0u8; 1];
             self.stream.read_exact(&mut method)?;
-            methods.append(&mut method.to_vec());
+            if self.auth_methods.contains(&method[0]) {
+                methods.append(&mut method.to_vec());
+            }
         }
         Ok(methods)
     }

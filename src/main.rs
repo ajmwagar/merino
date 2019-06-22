@@ -4,6 +4,7 @@
 use structopt::StructOpt;
 use merino::*;
 use std::error::Error;
+use std::path::PathBuf;
 use std::env;
 
 const LOGO: &str = r"
@@ -22,7 +23,16 @@ const LOGO: &str = r"
 struct Opt {
     #[structopt(short = "p", long = "port", default_value = "1080")]
     /// Set port to listen on
-    port: u16
+    port: u16,
+
+    #[structopt(long = "no-auth")]
+    /// Allow unauthenticated connections
+    no_auth: bool,
+
+    #[structopt(short = "u", long = "users", parse(from_os_str))]
+    /// CSV File with username/password pairs
+    users: Option<PathBuf>,
+
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -36,8 +46,35 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     pretty_env_logger::init_timed();
+
+    let mut auth_methods: Vec<u8> = Vec::new();
+
+    // Allow unauthenticated connections
+    if opt.no_auth { auth_methods.push(merino::AuthMethods::NoAuth as u8); }
+
+    // Enable username/password auth
+    let authed_users: Result<Vec<User>, Box<dyn Error>> = match opt.users {
+        Some(users_file) => {
+            auth_methods.push(AuthMethods::UserPass as u8);
+            let file = std::fs::File::open(users_file)?;
+
+            let mut users: Vec<User> = Vec::new();
+
+
+            let mut rdr = csv::Reader::from_reader(file);
+            for result in rdr.deserialize() {
+                let record: User = result?;
+
+                users.push(record);
+            }
+
+            Ok(users)
+        },
+        _ => { Ok(Vec::new()) }
+    };
     
-    let mut merino = Merino::new(opt.port)?;
+
+    let mut merino = Merino::new(opt.port, auth_methods)?;
 
     merino.serve()?;
 
