@@ -10,14 +10,15 @@
 
 ## 🎁 Features
 
-- Multi-threaded conneciton handler
-- Lightwieght (around 6% CPU usage on a Pentium laptop)
+- Multi-threaded connection handler
+- Lightwieght (only uses CPU time for starting connections)
 - Standalone binary (no system dependencies)
 - `1+ Gb/second` connection speeds (upload/download)
 - Tunable logging (try `export RUST_LOG=merino=DEBUG`)
 - `SOCKS5` Compatible Authentication methods:
-  - No Authentication
+  - `NoAuth`
   - Username & Password
+  - `GSSAPI` Coming Soon!
 
 ## 📦 Installation & 🏃 Usage
 
