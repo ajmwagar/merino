@@ -326,12 +326,12 @@ impl SOCKClient {
             self.stream.write(&response)?;
         }
         else {
-            warn!("No Suitable Auth method: {:?}", methods);
+            warn!("Client has no suitable Auth methods!");
             response[1] = AuthMethods::NoMethods as u8;
             self.stream.write(&response)?;
-            // self.shutdown()?;
+            self.shutdown()?;
+            Err(ResponseCode::Failure)
         }
-
 
         Ok(())
     }

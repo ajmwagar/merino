@@ -59,5 +59,5 @@ merino --help
   - [x] `CONNECT`
   - [ ] `BIND`
   - [ ] `ASSOCIATE` 
-- [ ] [Actix](https://github.com/actix-rs/actix) support
+- [ ] [Actix](https://github.com/actix-rs/actix) based backend
 - [ ] `SOCKS4` Support

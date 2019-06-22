@@ -1,4 +1,4 @@
-// #[macro_use] extern crate log;
+#[macro_use] extern crate log;
 // #[macro_use] extern crate structopt;
 
 use structopt::StructOpt;
@@ -76,9 +76,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         },
         _ => { Ok(Vec::new()) }
     };
-    
 
-    let mut merino = Merino::new(opt.port, opt.ip, auth_methods, authed_users?)?;
+    let authed_users = authed_users?;
+
+    if authed_users.len() == 0 {
+        warn!("No Authentication methods enabled. Clients will not be able to connect!");
+    }
+
+    let mut merino = Merino::new(opt.port, opt.ip, auth_methods, authed_users)?;
 
     merino.serve()?;
 
