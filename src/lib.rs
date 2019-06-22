@@ -27,7 +27,7 @@ const RESERVED: u8 = 0x00;
 
 #[derive(Clone,Debug, PartialEq, Deserialize)]
 pub struct User {
-    username: String,
+    pub username: String,
     password: String
 }
 
@@ -210,8 +210,8 @@ impl SOCKClient {
     }
 
     /// Check if username + password pair are valid
-    fn authed(&self, username: String, password: String) -> bool {
-        self.authed_users.contains(&User {username, password})
+    fn authed(&self, user: &User) -> bool {
+        self.authed_users.contains(user)
     }
 
     /// Send an error to the client
@@ -304,12 +304,22 @@ impl SOCKClient {
 
             self.stream.read(&mut password)?;
 
+            let username_str = String::from_utf8(username)?;
+            let password_str = String::from_utf8(password)?;
+
+           let user = User { 
+                username: username_str,
+                password: password_str 
+            };
+
             // Authenticate passwords
-            if self.authed(String::from_utf8(username)?, String::from_utf8(password)?) {
+            if self.authed(&user) {
+                debug!("Access Granted. User: {}", user.username);
                 let response = [1, ResponseCode::Success as u8];
                 self.stream.write(&response)?;
             } 
             else {
+                debug!("Access Denied. User: {}", user.username);
                 let response = [1, ResponseCode::Failure as u8];
                 self.stream.write(&response)?;
 
@@ -318,22 +328,23 @@ impl SOCKClient {
 
             }
 
+            Ok(())
         }
         else if methods.contains(&(AuthMethods::NoAuth as u8)) {
             // set the default auth method (no auth)
             response[1] = AuthMethods::NoAuth as u8;
             debug!("Sending NOAUTH packet");
             self.stream.write(&response)?;
+            Ok(())
         }
         else {
             warn!("Client has no suitable Auth methods!");
             response[1] = AuthMethods::NoMethods as u8;
             self.stream.write(&response)?;
             self.shutdown()?;
-            Err(ResponseCode::Failure)
+            Err(Box::new(ResponseCode::Failure))
         }
 
-        Ok(())
     }
 
     /// Handles a client
@@ -363,7 +374,7 @@ impl SOCKClient {
                 SockCommand::Connect => {
                     debug!("Handling CONNECT Command");
 
-                    let sock_addr = addr_to_socket(&req.addr_type, &req.addr, req.port);
+                    let sock_addr = addr_to_socket(&req.addr_type, &req.addr, req.port)?;
 
                     trace!("Connecting to: {:?}", sock_addr);
 
@@ -424,7 +435,7 @@ impl SOCKClient {
 }
 
 /// Convert an address and AddrType to a SocketAddr
-fn addr_to_socket(addr_type: &AddrType, addr: &Vec<u8>, port: u16) -> SocketAddr {
+fn addr_to_socket(addr_type: &AddrType, addr: &Vec<u8>, port: u16) -> Result<SocketAddr, Box<dyn Error>> {
     match addr_type {
         AddrType::V6 => {
             let new_addr = (0..8).into_iter().map(|x| {
@@ -433,22 +444,22 @@ fn addr_to_socket(addr_type: &AddrType, addr: &Vec<u8>, port: u16) -> SocketAddr
             }).collect::<Vec<u16>>();
 
 
-            SocketAddr::from(
+            Ok(SocketAddr::from(
                 SocketAddrV6::new(
                     Ipv6Addr::new(
                         new_addr[0], new_addr[1], new_addr[2], new_addr[3], new_addr[4], new_addr[5], new_addr[6], new_addr[7]), 
                     port, 0, 0)
-            )
+            ))
         },
         AddrType::V4 => {
-            SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]), port))
+            Ok(SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]), port)))
         },
         AddrType::Domain => {
             let mut domain = String::from_utf8_lossy(&addr[..]).to_string();
             domain.push_str(&":");
             domain.push_str(&port.to_string());
 
-            domain.parse::<SocketAddr>().unwrap()
+            Ok(domain.parse::<SocketAddr>()?)
         }
 
     }

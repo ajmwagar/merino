@@ -69,6 +69,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             for result in rdr.deserialize() {
                 let record: User = result?;
 
+                trace!("Loaded user: {}", record.username);
                 users.push(record);
             }
 
