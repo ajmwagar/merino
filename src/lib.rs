@@ -9,13 +9,6 @@ use std::net::{Shutdown, TcpStream, TcpListener, SocketAddr, SocketAddrV4, Socke
 use std::{thread};
 
 
-// TODO Move to file
-/// Username + Password pairs
-const USERS: &[(&str, &str)] = &[
-    ("ajmwagar", "password"),
-    ("admin", "admin"),
-];
-
 /// Version of socks
 const SOCKS_VERSION: u8 = 0x05;
 
@@ -24,15 +17,15 @@ const RESERVED: u8 = 0x00;
 // /// Default port of `SOCKS5` Protocool
 // const SOCKS5_PORT: u16 = 1080;
 
-/// Default ip of `SOCKS5` Protocool
-const SOCKS5_IP: &str = "127.0.0.1";
+// /// Default ip of `SOCKS5` Protocool
+// const SOCKS5_IP: &str = "127.0.0.1";
 
 // pub enum MerinoError {
 //     Io(Box<dyn Error>),
 //     Generic(String)
 // }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Clone,Debug, PartialEq, Deserialize)]
 pub struct User {
     username: String,
     password: String
@@ -132,18 +125,18 @@ pub enum AuthMethods {
 
 pub struct Merino {
     listener: TcpListener,
-    // users: ,
+    users: Vec<User>,
     auth_methods: Vec<u8>
 }
 
 impl Merino {
     /// Create a new Merino instance
-    pub fn new(port: u16,  auth_methods: Vec<u8>) -> Result<Self, Box<dyn Error>> {
-        info!("Listening on {}:{}", SOCKS5_IP, port);
+    pub fn new(port: u16,  ip: String, auth_methods: Vec<u8>, users: Vec<User>) -> Result<Self, Box<dyn Error>> {
+        info!("Listening on {}:{}", ip, port);
         Ok(Merino {
-            listener: TcpListener::bind(format!("{}:{}", SOCKS5_IP, port))?,
-            auth_methods
-
+            listener: TcpListener::bind(format!("{}:{}", ip, port))?,
+            auth_methods,
+            users
         })
     }
 
@@ -153,19 +146,37 @@ impl Merino {
             match self.listener.accept() {
                 Ok((stream, _remote)) => {
                     // TODO Optimize this
-                    let mut client = SOCKClient::new(stream, self.auth_methods.clone());
+                    let mut client = SOCKClient::new(stream, self.users.clone(), self.auth_methods.clone());
                     thread::spawn(move || {
                         match client.init() {
                             Ok(_) => {},
                             Err(error) => {
                                 error!("Error! {}", error);
-                                match client.error(ResponseCode::NetworkUnreachable) {
+                                let error_text = format!("{}", error);
+
+                                let response: ResponseCode;
+
+                                if error_text.contains("host") {
+                                    response = ResponseCode::HostUnreachable;
+                                }
+                                else if error_text.contains("Network"){
+                                    response = ResponseCode::NetworkUnreachable;
+                                }
+                                else if error_text.contains("ttl") {
+                                    response = ResponseCode::TtlExpired
+                                }
+                                else {
+                                    response = ResponseCode::Failure
+                                }
+
+                                match client.error(response) {
                                     Ok(_) => {},
-                                    Err(error) => error!("Failed to send error code: {}", error)
+                                    Err(_) => {}
                                 };
+
                                 match client.shutdown() {
                                     Ok(_) => {},
-                                    Err(error) => error!("Failed to shutdown connection: {}", error)
+                                    Err(_) => {}
                                 };
                             } 
                         };
@@ -182,18 +193,25 @@ struct SOCKClient {
     stream: TcpStream,
     auth_nmethods: u8,
     auth_methods: Vec<u8>,
+    authed_users: Vec<User>,
     socks_version: u8
 }
 
 impl SOCKClient {
     /// Create a new SOCKClient
-    pub fn new(stream: TcpStream, auth_methods: Vec<u8>) -> Self {
+    pub fn new(stream: TcpStream, authed_users: Vec<User>, auth_methods: Vec<u8>) -> Self {
         SOCKClient {
             stream,
             auth_nmethods: 0,
             socks_version: 0,
+            authed_users,
             auth_methods
         }
+    }
+
+    /// Check if username + password pair are valid
+    fn authed(&self, username: String, password: String) -> bool {
+        self.authed_users.contains(&User {username, password})
     }
 
     /// Send an error to the client
@@ -287,8 +305,7 @@ impl SOCKClient {
             self.stream.read(&mut password)?;
 
             // Authenticate passwords
-            // TODO Pull from file
-            if authed(String::from_utf8(username)?, String::from_utf8(password)?) {
+            if self.authed(String::from_utf8(username)?, String::from_utf8(password)?) {
                 let response = [1, ResponseCode::Success as u8];
                 self.stream.write(&response)?;
             } 
@@ -555,10 +572,6 @@ impl SOCKSReq {
 }
 
 // TODO Actually pull from csv file
-/// Check if username + password pair are valid
-fn authed(username: String, password: String) -> bool {
-    USERS.contains(&(&username, &password))
-}
 
 // fn u16_to_u8(n: u16) -> Vec<u8> {
 //  let mut vec = n.to_be_bytes().to_vec();

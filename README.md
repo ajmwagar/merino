@@ -6,12 +6,12 @@
 |_| |_| |_|\___|_|  |_|_| |_|\___/
 ```
 
-**A SOCKS5 Proxy written in Rust**
+**A `SOCKS5` Proxy server written in Rust**
 
 ## 🎁 Features
 
 - Multi-threaded connection handler
-- Lightwieght (only uses CPU time for starting connections)
+- Lightweight (only uses CPU time for starting connections)
 - Standalone binary (no system dependencies)
 - `1+ Gb/second` connection speeds (upload/download)
 - Tunable logging (try `export RUST_LOG=merino=DEBUG`)
@@ -48,3 +48,16 @@ merino --users users.csv
 # Display a help menu
 merino --help 
 ```
+
+# 🚥 Roadmap
+
+- [x] IPV6 Support
+- [ ] `SOCKS5` Authentication Methods
+  - [x] `NOAUTH` 
+  - [x] `USERPASS` 
+- [ ] `SOCKS5` Commands
+  - [x] `CONNECT`
+  - [ ] `BIND`
+  - [ ] `ASSOCIATE` 
+- [ ] [Actix](https://github.com/actix-rs/actix) support
+- [ ] `SOCKS4` Support

@@ -25,6 +25,10 @@ struct Opt {
     /// Set port to listen on
     port: u16,
 
+    #[structopt(short = "i", long = "ip", default_value = "127.0.0.1")]
+    /// Set ip to listen on
+    ip: String,
+
     #[structopt(long = "no-auth")]
     /// Allow unauthenticated connections
     no_auth: bool,
@@ -74,7 +78,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
     
 
-    let mut merino = Merino::new(opt.port, auth_methods)?;
+    let mut merino = Merino::new(opt.port, opt.ip, auth_methods, authed_users?)?;
 
     merino.serve()?;
 
