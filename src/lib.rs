@@ -8,6 +8,8 @@ use std::net::{Shutdown, TcpStream, TcpListener, SocketAddr, SocketAddrV4, Socke
 use std::{thread};
 
 
+const USERS: &[(&str, &str)] = &[("ajmwagar", "password")];
+
 /// Version of socks
 const SOCKS_VERSION: u8 = 0x05;
 
@@ -132,12 +134,16 @@ impl Merino {
         info!("Serving Connections...");
         loop {
             match self.listener.accept() {
-                Ok((stream, _remote)) => {
+                Ok((mut stream, _remote)) => {
                     let mut client = SOCKClient::new(stream);
                     thread::spawn(move || {
                         match client.init() {
                             Ok(_) => {},
-                            Err(error) => error!("Error! {}", error)
+                            Err(error) => {
+                                error!("Error! {}", error);
+                                client.error(ResponseCode::NetworkUnreachable);
+                                client.shutdown();
+                            } 
                         };
                     });
                 },
@@ -162,6 +168,18 @@ impl SOCKClient {
             auth_nmethods: 0,
             socks_version: 0
         }
+    }
+
+    /// Send an error to the client
+    pub fn error(&mut self, r: ResponseCode) -> Result<(), Box<dyn Error>> {
+        self.stream.write(&[5, r as u8])?;
+        Ok(())
+    }
+
+    /// Shutdown a client
+    pub fn shutdown(mut self) -> Result<(), Box<dyn Error>> {
+        self.stream.shutdown(Shutdown::Both)?;
+        Ok(())
     }
 
     fn init(&mut self) -> Result<(), Box<dyn Error>> {
@@ -201,6 +219,7 @@ impl SOCKClient {
 
         // Set the version in the response
         response[0] = SOCKS_VERSION;
+        
         if methods.contains(&(AuthMethods::UserPass as u8)) {
             // Set the default auth method (NO AUTH)
             response[1] = AuthMethods::UserPass as u8;
@@ -208,31 +227,53 @@ impl SOCKClient {
             debug!("Sending USER/PASS packet");
             self.stream.write(&response)?;
 
-            let mut header = [0u8; 2];
+            let mut header = [0u8;2];
 
             // Read a byte from the stream and determine the version being requested
             self.stream.read_exact(&mut header)?;
 
+            debug!("Auth Header: [{}, {}]", header[0], header[1]);
+
             // Username parsing
             let ulen = header[1];
+
             let mut username = Vec::with_capacity(ulen as usize);
-            self.stream.read_exact(&mut username)?;
+
+            // For some reason the vector needs to actually be full
+            for _ in 0..ulen {
+                username.push(0);
+            }
+
+            self.stream.read(&mut username)?;
 
             // Password Parsing
             let mut plen = [0u8; 1];
             self.stream.read_exact(&mut plen)?;
+            
+
             let mut password = Vec::with_capacity(plen[0] as usize);
-            self.stream.read_exact(&mut password)?;
 
-            // Auth response
-            let mut response = [0u8; 2];
+            // For some reason the vector needs to actually be full
+            for _ in 0..plen[0] {
+                password.push(0);
+            }
 
-            response[0] = SOCKS_VERSION;
+            self.stream.read(&mut password)?;
 
-            // TODO Add authentication
-            response[1] = ResponseCode::Success as u8;
+            // Authenticate passwords
+            // TODO Pull from file
+            if authed(String::from_utf8(username)?, String::from_utf8(password)?) {
+                let response = [1, ResponseCode::Success as u8];
+                self.stream.write(&response)?;
+            } 
+            else {
+                let response = [1, ResponseCode::Failure as u8];
+                self.stream.write(&response)?;
 
-            self.stream.write(&response)?;
+                // Shutdown 
+                self.stream.shutdown(Shutdown::Both);
+
+            }
 
         }
         else if methods.contains(&(AuthMethods::NoAuth as u8)) {
@@ -506,6 +547,12 @@ impl SOCKSReq {
         })
 
     }
+}
+
+// TODO Actually pull from csv file
+/// Check if username + password pair are valid
+fn authed(username: String, password: String) -> bool {
+    USERS.contains(&(&username, &password))
 }
 
 // fn u16_to_u8(n: u16) -> Vec<u8> {
