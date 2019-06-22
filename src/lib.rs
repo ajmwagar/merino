@@ -20,10 +20,10 @@ const SOCKS_VERSION: u8 = 0x05;
 
 const RESERVED: u8 = 0x00;
 
-/// Default port of `SOCKS5` Protocool
-const SOCKS5_PORT: u16 = 1080;
+// /// Default port of `SOCKS5` Protocool
+// const SOCKS5_PORT: u16 = 1080;
 
-/// Default port of `SOCKS5` Protocool
+/// Default ip of `SOCKS5` Protocool
 const SOCKS5_IP: &str = "127.0.0.1";
 
 // pub enum MerinoError {
@@ -72,14 +72,14 @@ impl AddrType {
         }
     }
 
-    /// Return the size of the AddrType
-    fn size(&self) -> u8 {
-        match self {
-            AddrType::V4 => 4,
-            AddrType::Domain => 1,
-            AddrType::V6 => 16
-        }
-    }
+    // /// Return the size of the AddrType
+    // fn size(&self) -> u8 {
+    //     match self {
+    //         AddrType::V4 => 4,
+    //         AddrType::Domain => 1,
+    //         AddrType::V6 => 16
+    //     }
+    // }
 }
 
 /// SOCK5 CMD Type
@@ -103,19 +103,19 @@ impl SockCommand {
 }
 
 
-/// State of a given connection
-enum State {
-    Connected,
-    Verifying,
-    Ready,
-    Proxy
-}
+// /// State of a given connection
+// enum State {
+//     Connected,
+//     Verifying,
+//     Ready,
+//     Proxy
+// }
 
 /// Client Authentication Methods
 enum AuthMethods {
     /// No Authentication
     NoAuth = 0x00,
-    GssApi = 0x01,
+    // GssApi = 0x01,
     /// Authenticate with a username / password
     UserPass = 0x02,
     /// Cannot authenticate
@@ -139,15 +139,21 @@ impl Merino {
         info!("Serving Connections...");
         loop {
             match self.listener.accept() {
-                Ok((mut stream, _remote)) => {
+                Ok((stream, _remote)) => {
                     let mut client = SOCKClient::new(stream);
                     thread::spawn(move || {
                         match client.init() {
                             Ok(_) => {},
                             Err(error) => {
                                 error!("Error! {}", error);
-                                client.error(ResponseCode::NetworkUnreachable);
-                                client.shutdown();
+                                match client.error(ResponseCode::NetworkUnreachable) {
+                                    Ok(_) => {},
+                                    Err(error) => error!("Failed to send error code: {}", error)
+                                };
+                                match client.shutdown() {
+                                    Ok(_) => {},
+                                    Err(error) => error!("Failed to shutdown connection: {}", error)
+                                };
                             } 
                         };
                     });
@@ -201,7 +207,7 @@ impl SOCKClient {
         // Handle SOCKS4 requests
         if header[0] != SOCKS_VERSION {
             warn!("Init: Unsupported version: SOCKS{}", self.socks_version);
-            self.stream.shutdown(Shutdown::Both);
+            self.stream.shutdown(Shutdown::Both)?;
         }
         // Valid SOCKS5
         else {
@@ -217,7 +223,7 @@ impl SOCKClient {
     fn auth(&mut self) -> Result<(), Box<dyn Error>> {
         debug!("Authenticating w/ {}", self.stream.peer_addr()?.ip());
         // Get valid auth methods
-        let mut methods = self.get_avalible_methods()?;
+        let methods = self.get_avalible_methods()?;
         trace!("methods: {:?}", methods);
 
         let mut response = [0u8; 2];
@@ -276,7 +282,7 @@ impl SOCKClient {
                 self.stream.write(&response)?;
 
                 // Shutdown 
-                self.stream.shutdown(Shutdown::Both);
+                self.stream.shutdown(Shutdown::Both)?;
 
             }
 
@@ -289,7 +295,9 @@ impl SOCKClient {
         }
         else {
             warn!("No Suitable Auth method: {:?}", methods);
-            self.stream.shutdown(Shutdown::Both);
+            response[1] = AuthMethods::NoMethods as u8;
+            self.stream.write(&response)?;
+            self.stream.shutdown(Shutdown::Both)?;
         }
 
 
@@ -331,37 +339,6 @@ impl SOCKClient {
 
                     trace!("Connected!");
 
-                     // let local = target.local_addr()?;
-
-                     // let mut response = Vec::with_capacity(7);
-
-                     // response.push(SOCKS_VERSION); // Version
-                     // response.push(ResponseCode::Success as u8); // Reply TODO: Error handling
-                     // response.push(RESERVED); // Reserved
-
-                     // // Push IP
-                     // if local.is_ipv4() {
-                     //     response.push(AddrType::V4 as u8);
-                     //     let mut ip = format!("{}", local.ip()).split(".").into_iter().map(|x| x.parse::<u8>().unwrap()).collect::<Vec<u8>>();
-                     //     response.append(&mut ip);
-                     // }
-                     // else if local.is_ipv6() {
-                     //     response.push(AddrType::V6 as u8);
-
-                     //     let ip = format!("{}", local.ip()).split(":").into_iter().map(|x| x.parse::<u16>().unwrap()).collect::<Vec<u16>>();
-
-                     //     for i in (0..(ip.len() /2)) {
-                     //         response.append(&mut u16_to_u8(ip[i]));
-                     //     }
-                     // }
-                    
-
-                     // response.append(&mut u16_to_u8(req.port));
-
-                     // debug!("Sending response: {:?}", response);
-
-                     // self.stream.write(&response);
-
                     self.stream.write(&[SOCKS_VERSION, ResponseCode::Success as u8, RESERVED, 1, 127, 0, 0, 1, 0, 0]).unwrap();
 
                     // Copy it all
@@ -370,17 +347,19 @@ impl SOCKClient {
                     let mut inbound_in = self.stream.try_clone()?;
                     let mut inbound_out = self.stream.try_clone()?;
 
+
+                    // Download Thread
                     thread::spawn(move || {
-                        // TODO: Clean up this hack
-                        trace!("Uploaded: {} Bytes", copy(&mut inbound_in, &mut outbound_out).unwrap_or(0));
-                        inbound_in.shutdown(Shutdown::Read).unwrap_or(());
-                        outbound_out.shutdown(Shutdown::Write).unwrap_or(());
-                    });
-                    thread::spawn(move || {
-                        // TODO: Clean up this hack
-                        trace!("Downloaded: {} Bytes", copy(&mut outbound_in, &mut inbound_out).unwrap_or(0));
+                        copy(&mut outbound_in, &mut inbound_out).is_ok();
                         outbound_in.shutdown(Shutdown::Read).unwrap_or(());
                         inbound_out.shutdown(Shutdown::Write).unwrap_or(());
+                    });
+
+                    // Upload Thread
+                    thread::spawn(move || {
+                        copy(&mut inbound_in, &mut outbound_out).is_ok();
+                        inbound_in.shutdown(Shutdown::Read).unwrap_or(());
+                        outbound_out.shutdown(Shutdown::Write).unwrap_or(());
                     });
 
 
