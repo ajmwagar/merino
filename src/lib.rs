@@ -8,7 +8,12 @@ use std::net::{Shutdown, TcpStream, TcpListener, SocketAddr, SocketAddrV4, Socke
 use std::{thread};
 
 
-const USERS: &[(&str, &str)] = &[("ajmwagar", "password")];
+// TODO Move to file
+/// Username + Password pairs
+const USERS: &[(&str, &str)] = &[
+    ("ajmwagar", "password"),
+    ("admin", "admin"),
+];
 
 /// Version of socks
 const SOCKS_VERSION: u8 = 0x05;
