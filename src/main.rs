@@ -7,13 +7,13 @@ use std::error::Error;
 use std::env;
 
 const LOGO: &str = r"
-                     _
- _ __ ___   ___ _ __(_)_ __   ___
-| '_ ` _ \ / _ \ '__| | '_ \ / _ \
-| | | | | |  __/ |  | | | | | (_) |
-|_| |_| |_|\___|_|  |_|_| |_|\___/
+                      _
+  _ __ ___   ___ _ __(_)_ __   ___
+ | '_ ` _ \ / _ \ '__| | '_ \ / _ \
+ | | | | | |  __/ |  | | | | | (_) |
+ |_| |_| |_|\___|_|  |_|_| |_|\___/
 
-A SOCKS5 Proxy written in Rust
+ A SOCKS5 Proxy server written in Rust
 ";
 
 #[derive(StructOpt, Debug)]

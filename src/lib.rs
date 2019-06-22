@@ -182,7 +182,7 @@ impl SOCKClient {
     }
 
     /// Shutdown a client
-    pub fn shutdown(mut self) -> Result<(), Box<dyn Error>> {
+    pub fn shutdown(&mut self) -> Result<(), Box<dyn Error>> {
         self.stream.shutdown(Shutdown::Both)?;
         Ok(())
     }
@@ -196,7 +196,7 @@ impl SOCKClient {
         self.socks_version = header[0];
         self.auth_nmethods = header[1];
 
-        debug!("Version: {} Auth nmethods: {}", self.socks_version, self.auth_nmethods);
+        trace!("Version: {} Auth nmethods: {}", self.socks_version, self.auth_nmethods);
 
         // Handle SOCKS4 requests
         if header[0] != SOCKS_VERSION {
@@ -217,8 +217,8 @@ impl SOCKClient {
     fn auth(&mut self) -> Result<(), Box<dyn Error>> {
         debug!("Authenticating w/ {}", self.stream.peer_addr()?.ip());
         // Get valid auth methods
-        let mut methods = self.get_avalible_methods();
-        debug!("methods: {:?}", methods);
+        let mut methods = self.get_avalible_methods()?;
+        trace!("methods: {:?}", methods);
 
         let mut response = [0u8; 2];
 
@@ -237,7 +237,7 @@ impl SOCKClient {
             // Read a byte from the stream and determine the version being requested
             self.stream.read_exact(&mut header)?;
 
-            debug!("Auth Header: [{}, {}]", header[0], header[1]);
+            // debug!("Auth Header: [{}, {}]", header[0], header[1]);
 
             // Username parsing
             let ulen = header[1];
@@ -325,11 +325,11 @@ impl SOCKClient {
 
                     let sock_addr = addr_to_socket(&req.addr_type, &req.addr, req.port);
 
-                    debug!("Connecting to: {:?}", sock_addr);
+                    trace!("Connecting to: {:?}", sock_addr);
 
                     let target = TcpStream::connect(sock_addr)?;
 
-                    debug!("Connected!");
+                    trace!("Connected!");
 
                      // let local = target.local_addr()?;
 
@@ -371,14 +371,16 @@ impl SOCKClient {
                     let mut inbound_out = self.stream.try_clone()?;
 
                     thread::spawn(move || {
-                        copy(&mut inbound_in, &mut outbound_out);
-                        inbound_in.shutdown(Shutdown::Read);
-                        outbound_out.shutdown(Shutdown::Write);
+                        // TODO: Clean up this hack
+                        trace!("Uploaded: {} Bytes", copy(&mut inbound_in, &mut outbound_out).unwrap_or(0));
+                        inbound_in.shutdown(Shutdown::Read).unwrap_or(());
+                        outbound_out.shutdown(Shutdown::Write).unwrap_or(());
                     });
                     thread::spawn(move || {
-                        copy(&mut outbound_in, &mut inbound_out);
-                        outbound_in.shutdown(Shutdown::Read);
-                        inbound_out.shutdown(Shutdown::Write);
+                        // TODO: Clean up this hack
+                        trace!("Downloaded: {} Bytes", copy(&mut outbound_in, &mut inbound_out).unwrap_or(0));
+                        outbound_in.shutdown(Shutdown::Read).unwrap_or(());
+                        inbound_out.shutdown(Shutdown::Write).unwrap_or(());
                     });
 
 
@@ -397,14 +399,14 @@ impl SOCKClient {
     }
 
     /// Return the avalible methods based on `self.auth_nmethods`
-    fn get_avalible_methods(&mut self) -> Vec<u8> {
+    fn get_avalible_methods(&mut self) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut methods: Vec<u8> = Vec::with_capacity(self.auth_nmethods as usize);
         for _ in 0..self.auth_nmethods {
             let mut method = [0u8; 1];
-            self.stream.read_exact(&mut method);
+            self.stream.read_exact(&mut method)?;
             methods.append(&mut method.to_vec());
         }
-        methods
+        Ok(methods)
     }
 }
 
@@ -510,33 +512,35 @@ impl SOCKSReq {
             }
         }?;
 
-        debug!("Getting Addr");
+        trace!("Getting Addr");
         // Get Addr from addr_type and stream
-        let addr = match addr_type {
+        let addr: Result<Vec<u8>, Box<dyn Error>> = match addr_type {
             AddrType::Domain => {
                 let mut dlen = [0u8; 1];
-                stream.read(&mut dlen).unwrap();
+                stream.read(&mut dlen)?;
 
                 let mut domain = Vec::with_capacity(dlen[0] as usize);
-                stream.read_exact(&mut domain).unwrap();
+                stream.read_exact(&mut domain)?;
 
-                domain
+                Ok(domain)
             },
             AddrType::V4 => {
                 let mut addr = [0u8; 4];
-                stream.read_exact(&mut addr);
-                addr.to_vec()
+                stream.read_exact(&mut addr)?;
+                Ok(addr.to_vec())
             },
             AddrType::V6 => {
                 let mut addr = [0u8; 16];
-                stream.read_exact(&mut addr);
-                addr.to_vec()
+                stream.read_exact(&mut addr)?;
+                Ok(addr.to_vec())
             }
         };
 
+        let addr = addr?;
+
         // read DST.port
         let mut port = [0u8; 2];
-        stream.read_exact(&mut port);
+        stream.read_exact(&mut port)?;
 
         // Merge two u8s into u16
         let port = ((port[0] as u16) << 8) | port[1] as u16;
