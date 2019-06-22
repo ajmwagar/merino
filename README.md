@@ -10,13 +10,14 @@
 
 ## 🎁 Features
 
-- Multi-threading 
+- Multi-threaded conneciton handler
+- Lightwieght (around 6% CPU usage on a Pentium laptop)
 - Standalone binary (no system dependencies)
-- `100+ Mb/second` connection speeds (upload/download)
+- `1+ Gb/second` connection speeds (upload/download)
 - Tunable logging (try `export RUST_LOG=merino=DEBUG`)
 - `SOCKS5` Compatible Authentication methods:
   - No Authentication
-  - User name & Password Auth
+  - Username & Password
 
 ## 📦 Installation & 🏃 Usage
 
@@ -37,9 +38,12 @@ cargo install --path .
 ### Usage
 
 ```bash
-merino # Start a SOCKS5 Proxy server listening on port 1080
+# Start a SOCKS5 Proxy server listening on port 1080 without authentication
+merino --no-auth
 
-merino -p 8080 # Set the port to 8080
+# Use username/password authentication and read users from users.csv
+merino --users users.csv
 
-merino --help # Displays a help menu
+# Display a help menu
+merino --help 
 ```
