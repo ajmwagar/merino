@@ -1,5 +1,5 @@
 ---
-title: Kashmir: SOCKS5 Proxy in Rust
+title: Merino: SOCKS5 Proxy in Rust
 author: Avery Wagar
 date: 2019-06-19
 draft: true
