@@ -11,9 +11,9 @@
 ## 🎁 Features
 
 - Multi-threaded connection handler
-- Lightweight (only uses CPU time for starting connections)
+- Lightweight (Less than 0.6% CPU usage while surfing the web/streaming YouTube)
 - Standalone binary (no system dependencies)
-- `1+ Gb/second` connection speeds (upload/download)
+- `1+ Gb/second` connection speeds (**On Gigabit LAN network over ethernet. Results may vary!**)
 - Tunable logging (try `export RUST_LOG=merino=DEBUG`)
 - `SOCKS5` Compatible Authentication methods:
   - `NoAuth`
@@ -54,10 +54,11 @@ merino --help
 - [x] IPV6 Support
 - [ ] `SOCKS5` Authentication Methods
   - [x] `NOAUTH` 
-  - [x] `USERPASS` 
+  - [x] `USERPASS`
+  - [ ] `GSSAPI` Coming Soon!
 - [ ] `SOCKS5` Commands
   - [x] `CONNECT`
   - [ ] `BIND`
   - [ ] `ASSOCIATE` 
 - [ ] [Actix](https://github.com/actix-rs/actix) based backend
-- [ ] `SOCKS4` Support
+- [ ] `SOCKS4`/`SOCKS4a` Support
