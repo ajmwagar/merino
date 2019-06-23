@@ -56,6 +56,7 @@ merino --help
   - [x] `NOAUTH` 
   - [x] `USERPASS`
   - [ ] `GSSAPI` Coming Soon!
+- [ ] Custom plugin/middleware support
 - [ ] `SOCKS5` Commands
   - [x] `CONNECT`
   - [ ] `BIND`
