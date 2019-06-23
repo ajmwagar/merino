@@ -143,8 +143,7 @@ impl Merino {
     pub fn serve(&mut self) -> Result<(), Box<dyn Error>> {
         info!("Serving Connections...");
         loop {
-            match self.listener.accept() {
-                Ok((stream, _remote)) => {
+            if let Ok((stream, _remote)) = self.listener.accept() {
                     // TODO Optimize this
                     let mut client = SOCKClient::new(stream, self.users.clone(), self.auth_methods.clone());
                     thread::spawn(move || {
@@ -169,20 +168,15 @@ impl Merino {
                                     response = ResponseCode::Failure
                                 }
 
-                                match client.error(response) {
-                                    Ok(_) => {},
-                                    Err(_) => {}
+                                if client.error(response).is_err() {
+                                    warn!("Failed to send error code");
                                 };
-
-                                match client.shutdown() {
-                                    Ok(_) => {},
-                                    Err(_) => {}
+                                if client.shutdown().is_err() {
+                                    warn!("Failed to shutdown TcpStream");
                                 };
                             } 
                         };
                     });
-                },
-                _ => {}
 
             }
         }
@@ -216,7 +210,7 @@ impl SOCKClient {
 
     /// Send an error to the client
     pub fn error(&mut self, r: ResponseCode) -> Result<(), Box<dyn Error>> {
-        self.stream.write(&[5, r as u8])?;
+        self.stream.write_all(&[5, r as u8])?;
         Ok(())
     }
 
@@ -269,7 +263,7 @@ impl SOCKClient {
             response[1] = AuthMethods::UserPass as u8;
 
             debug!("Sending USER/PASS packet");
-            self.stream.write(&response)?;
+            self.stream.write_all(&response)?;
 
             let mut header = [0u8;2];
 
@@ -288,7 +282,7 @@ impl SOCKClient {
                 username.push(0);
             }
 
-            self.stream.read(&mut username)?;
+            self.stream.read_exact(&mut username)?;
 
             // Password Parsing
             let mut plen = [0u8; 1];
@@ -302,7 +296,7 @@ impl SOCKClient {
                 password.push(0);
             }
 
-            self.stream.read(&mut password)?;
+            self.stream.read_exact(&mut password)?;
 
             let username_str = String::from_utf8(username)?;
             let password_str = String::from_utf8(password)?;
@@ -316,12 +310,12 @@ impl SOCKClient {
             if self.authed(&user) {
                 debug!("Access Granted. User: {}", user.username);
                 let response = [1, ResponseCode::Success as u8];
-                self.stream.write(&response)?;
+                self.stream.write_all(&response)?;
             } 
             else {
                 debug!("Access Denied. User: {}", user.username);
                 let response = [1, ResponseCode::Failure as u8];
-                self.stream.write(&response)?;
+                self.stream.write_all(&response)?;
 
                 // Shutdown 
                 self.shutdown()?;
@@ -334,13 +328,13 @@ impl SOCKClient {
             // set the default auth method (no auth)
             response[1] = AuthMethods::NoAuth as u8;
             debug!("Sending NOAUTH packet");
-            self.stream.write(&response)?;
+            self.stream.write_all(&response)?;
             Ok(())
         }
         else {
             warn!("Client has no suitable Auth methods!");
             response[1] = AuthMethods::NoMethods as u8;
-            self.stream.write(&response)?;
+            self.stream.write_all(&response)?;
             self.shutdown()?;
             Err(Box::new(ResponseCode::Failure))
         }
@@ -382,7 +376,7 @@ impl SOCKClient {
 
                     trace!("Connected!");
 
-                    self.stream.write(&[SOCKS_VERSION, ResponseCode::Success as u8, RESERVED, 1, 127, 0, 0, 1, 0, 0]).unwrap();
+                    self.stream.write_all(&[SOCKS_VERSION, ResponseCode::Success as u8, RESERVED, 1, 127, 0, 0, 1, 0, 0]).unwrap();
 
                     // Copy it all
                     let mut outbound_in = target.try_clone()?;
@@ -435,12 +429,12 @@ impl SOCKClient {
 }
 
 /// Convert an address and AddrType to a SocketAddr
-fn addr_to_socket(addr_type: &AddrType, addr: &Vec<u8>, port: u16) -> Result<SocketAddr, Box<dyn Error>> {
+fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> Result<SocketAddr, Box<dyn Error>> {
     match addr_type {
         AddrType::V6 => {
-            let new_addr = (0..8).into_iter().map(|x| {
+            let new_addr = (0..8).map(|x| {
                 trace!("{} and {}", x * 2, (x * 2) + 1);
-                ((addr[(x * 2)] as u16) << 8) | addr[(x * 2) + 1] as u16
+                (u16::from(addr[(x * 2)]) << 8) | u16::from(addr[(x * 2) + 1])
             }).collect::<Vec<u16>>();
 
 
@@ -467,17 +461,17 @@ fn addr_to_socket(addr_type: &AddrType, addr: &Vec<u8>, port: u16) -> Result<Soc
 
 
 /// Convert an AddrType and address to String
-fn pretty_print_addr(addr_type: &AddrType, addr: &Vec<u8>) -> String {
+fn pretty_print_addr(addr_type: &AddrType, addr: &[u8]) -> String {
     match addr_type {
         AddrType::Domain => {
             String::from_utf8_lossy(addr).to_string()
         },
         AddrType::V4 => {
-            addr.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(".")
+            addr.iter().map(std::string::ToString::to_string).collect::<Vec<String>>().join(".")
         },
         AddrType::V6 => {
-            let addr_16 = (0..8).into_iter().map(|x| {
-                ((addr[(x * 2)] as u16) << 8) | addr[(x * 2) + 1] as u16
+            let addr_16 = (0..8).map(|x| {
+                (u16::from(addr[(x * 2)]) << 8) | u16::from(addr[(x * 2) + 1])
             }).collect::<Vec<u16>>();
 
             addr_16.iter().map(|x| format!("{:x}", x)).collect::<Vec<String>>().join(":")
@@ -541,7 +535,7 @@ impl SOCKSReq {
         let addr: Result<Vec<u8>, Box<dyn Error>> = match addr_type {
             AddrType::Domain => {
                 let mut dlen = [0u8; 1];
-                stream.read(&mut dlen)?;
+                stream.read_exact(&mut dlen)?;
 
                 let mut domain = Vec::with_capacity(dlen[0] as usize);
                 stream.read_exact(&mut domain)?;
@@ -567,8 +561,7 @@ impl SOCKSReq {
         stream.read_exact(&mut port)?;
 
         // Merge two u8s into u16
-        let port = ((port[0] as u16) << 8) | port[1] as u16;
-
+        let port = (u16::from(port[0]) << 8) | u16::from(port[1]);
 
         // Return parsed request
         Ok(SOCKSReq {

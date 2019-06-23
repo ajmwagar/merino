@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let authed_users = authed_users?;
 
-    if auth_methods.len() == 0 {
+    if auth_methods.is_empty() {
         warn!("No Authentication methods enabled. Clients will not be able to connect!");
     }
 
