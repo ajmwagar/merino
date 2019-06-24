@@ -44,12 +44,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let opt = Opt::from_args();
 
+    // Setup logging
+
     //Set the `RUST_LOG` var if none is provided
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", "merino=INFO");
     }
 
     pretty_env_logger::init_timed();
+
+    // Setup Proxy settings
 
     let mut auth_methods: Vec<u8> = Vec::new();
 
@@ -84,8 +88,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         warn!("No Authentication methods enabled. Clients will not be able to connect!");
     }
 
+
+    // Create proxy server
     let mut merino = Merino::new(opt.port, opt.ip, auth_methods, authed_users)?;
 
+    // Start Proxies
     merino.serve()?;
 
     Ok(())

@@ -14,16 +14,6 @@ const SOCKS_VERSION: u8 = 0x05;
 
 const RESERVED: u8 = 0x00;
 
-// /// Default port of `SOCKS5` Protocool
-// const SOCKS5_PORT: u16 = 1080;
-
-// /// Default ip of `SOCKS5` Protocool
-// const SOCKS5_IP: &str = "127.0.0.1";
-
-// pub enum MerinoError {
-//     Io(Box<dyn Error>),
-//     Generic(String)
-// }
 
 #[derive(Clone,Debug, PartialEq, Deserialize)]
 pub struct User {
@@ -104,14 +94,6 @@ impl SockCommand {
 }
 
 
-// /// State of a given connection
-// enum State {
-//     Connected,
-//     Verifying,
-//     Ready,
-//     Proxy
-// }
-
 /// Client Authentication Methods
 pub enum AuthMethods {
     /// No Authentication
@@ -152,10 +134,11 @@ impl Merino {
                             Err(error) => {
                                 error!("Error! {}", error);
                                 let error_text = format!("{}", error);
+                                
 
                                 let response: ResponseCode;
 
-                                if error_text.contains("host") {
+                                if error_text.contains("Host") {
                                     response = ResponseCode::HostUnreachable;
                                 }
                                 else if error_text.contains("Network"){
@@ -571,14 +554,5 @@ impl SOCKSReq {
             addr,
             port
         })
-
     }
 }
-
-// TODO Actually pull from csv file
-
-// fn u16_to_u8(n: u16) -> Vec<u8> {
-//  let mut vec = n.to_be_bytes().to_vec();
-//  vec.reverse();
-//  vec
-// }
