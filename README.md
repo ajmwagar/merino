@@ -10,6 +10,7 @@
 
 ## 🎁 Features
 
+- Written in **100% Safe Rust**
 - Multi-threaded connection handler
 - Lightweight (Less than 0.6% CPU usage while surfing the web/streaming YouTube)
 - Standalone binary (no system dependencies)
