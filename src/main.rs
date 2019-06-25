@@ -1,5 +1,5 @@
+#![forbid(unsafe_code)]
 #[macro_use] extern crate log;
-// #[macro_use] extern crate structopt;
 
 use structopt::StructOpt;
 use merino::*;
@@ -7,6 +7,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::env;
 
+/// Logo to be printed at when merino is run 
 const LOGO: &str = r"
                       _
   _ __ ___   ___ _ __(_)_ __   ___

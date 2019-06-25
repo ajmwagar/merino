@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #[macro_use] extern crate serde_derive;
 #[macro_use] extern crate log;
 use snafu::{Snafu};
@@ -13,7 +14,6 @@ use std::{thread};
 const SOCKS_VERSION: u8 = 0x05;
 
 const RESERVED: u8 = 0x00;
-
 
 #[derive(Clone,Debug, PartialEq, Deserialize)]
 pub struct User {
