@@ -6,7 +6,7 @@ use snafu::{Snafu};
 use std::io::prelude::*;
 use std::io::copy;
 use std::error::Error;
-use std::net::{Shutdown, TcpStream, TcpListener, SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr};
+use std::net::{Shutdown, TcpStream, TcpListener, SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 use std::{thread};
 
 
@@ -355,7 +355,7 @@ impl SOCKClient {
 
                     trace!("Connecting to: {:?}", sock_addr);
 
-                    let target = TcpStream::connect(sock_addr)?;
+                    let target = TcpStream::connect(&sock_addr[..])?;
 
                     trace!("Connected!");
 
@@ -412,7 +412,7 @@ impl SOCKClient {
 }
 
 /// Convert an address and AddrType to a SocketAddr
-fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> Result<SocketAddr, Box<dyn Error>> {
+fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> Result<Vec<SocketAddr>, Box<dyn Error>> {
     match addr_type {
         AddrType::V6 => {
             let new_addr = (0..8).map(|x| {
@@ -421,22 +421,22 @@ fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> Result<Socket
             }).collect::<Vec<u16>>();
 
 
-            Ok(SocketAddr::from(
+            Ok(vec![SocketAddr::from(
                 SocketAddrV6::new(
                     Ipv6Addr::new(
                         new_addr[0], new_addr[1], new_addr[2], new_addr[3], new_addr[4], new_addr[5], new_addr[6], new_addr[7]), 
                     port, 0, 0)
-            ))
+            )])
         },
         AddrType::V4 => {
-            Ok(SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]), port)))
+            Ok(vec![SocketAddr::from(SocketAddrV4::new(Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]), port))])
         },
         AddrType::Domain => {
             let mut domain = String::from_utf8_lossy(&addr[..]).to_string();
             domain.push_str(&":");
             domain.push_str(&port.to_string());
 
-            Ok(domain.parse::<SocketAddr>()?)
+            Ok(domain.to_socket_addrs()?.collect())
         }
 
     }
@@ -520,7 +520,7 @@ impl SOCKSReq {
                 let mut dlen = [0u8; 1];
                 stream.read_exact(&mut dlen)?;
 
-                let mut domain = Vec::with_capacity(dlen[0] as usize);
+                let mut domain = vec![0u8; dlen[0] as usize];
                 stream.read_exact(&mut domain)?;
 
                 Ok(domain)
