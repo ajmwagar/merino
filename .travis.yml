@@ -1,0 +1,53 @@
+language: rust
+sudo: required
+dist: trusty
+addons:
+    apt:
+        packages:
+            - libssl-dev
+cache:
+  cargo: true
+rust:
+  # - nightly
+  - beta
+  - stable
+# matrix:
+#   allow_failures:
+#     - rust: nightly
+
+before_cache: |
+  if [[ "$TRAVIS_RUST_VERSION" == nightly ]]; then
+    RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin -f
+  fi
+
+script:
+  - cargo clean
+  - cargo build
+  - cargo test
+
+
+after_success: |
+  if [[ "$TRAVIS_RUST_VERSION" == nightly ]]; then
+    # Uncomment the following line for coveralls.io
+    # cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID
+
+    # Uncomment the following two lines create and upload a report for codecov.io
+    cargo tarpaulin --out Xml
+    bash <(curl -s https://codecov.io/bash)
+  fi
+
+before_deploy:
+  - tar -czf $PACKAGE -C target/$TARGET/release/ $NAME
+  # Set up git user name and tag this commit
+  - git config --local user.name "ajmwagar"
+  - git config --local user.email "ajmw.subs@gmail.com"
+  - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1)}
+  - git tag $TRAVIS_TAG
+
+deploy:
+  provider: releases
+  api_key: $DEPLOYKEY
+  file: ${PACKAGE}
+  skip_cleanup: true
+  on:
+    tags: true
