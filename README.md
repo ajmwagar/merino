@@ -8,6 +8,9 @@
 
 **A `SOCKS5` Proxy server written in Rust**
 
+[![Build Status](https://travis-ci.org/ajmwagar/merino.svg?branch=master)](https://travis-ci.org/ajmwagar/merino)
+[![dependency status](https://deps.rs/repo/github/ajmwagar/merino/status.svg)](https://deps.rs/repo/github/ajmwagar/merino)
+
 ## 🎁 Features
 
 - Written in **100% Safe Rust**
