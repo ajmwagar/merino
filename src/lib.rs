@@ -113,10 +113,10 @@ pub struct Merino {
 
 impl Merino {
     /// Create a new Merino instance
-    pub fn new(port: u16,  ip: String, auth_methods: Vec<u8>, users: Vec<User>) -> Result<Self, Box<dyn Error>> {
+    pub fn new(port: u16,  ip: &str, auth_methods: Vec<u8>, users: Vec<User>) -> Result<Self, Box<dyn Error>> {
         info!("Listening on {}:{}", ip, port);
         Ok(Merino {
-            listener: TcpListener::bind(format!("{}:{}", ip, port))?,
+            listener: TcpListener::bind((ip, port))?,
             auth_methods,
             users
         })
