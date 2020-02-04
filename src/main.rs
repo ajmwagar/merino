@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
     // Create proxy server
-    let mut merino = Merino::new(opt.port, opt.ip, auth_methods, authed_users)?;
+    let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users)?;
 
     // Start Proxies
     merino.serve()?;
