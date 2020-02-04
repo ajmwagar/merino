@@ -1,13 +1,14 @@
 #![forbid(unsafe_code)]
-#[macro_use] extern crate serde_derive;
-#[macro_use] extern crate log;
 use snafu::{Snafu};
 
-use std::io::prelude::*;
 use std::io::copy;
 use std::error::Error;
-use std::net::{Shutdown, TcpStream, TcpListener, SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
-use std::{thread};
+use std::net::{Shutdown, SocketAddr, SocketAddrV4, SocketAddrV6, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
+
+use log::{info, warn, error, debug, trace};
+use serde::{Deserialize};
+use tokio::net::{TcpListener, TcpStream};
+
 
 
 /// Version of socks
@@ -113,22 +114,22 @@ pub struct Merino {
 
 impl Merino {
     /// Create a new Merino instance
-    pub fn new(port: u16,  ip: &str, auth_methods: Vec<u8>, users: Vec<User>) -> Result<Self, Box<dyn Error>> {
+    async pub fn new(port: u16,  ip: &str, auth_methods: Vec<u8>, users: Vec<User>) -> Result<Self, Box<dyn Error>> {
         info!("Listening on {}:{}", ip, port);
         Ok(Merino {
-            listener: TcpListener::bind((ip, port))?,
+            listener: TcpListener::bind((ip, port)).await?,
             auth_methods,
             users
         })
     }
 
-    pub fn serve(&mut self) -> Result<(), Box<dyn Error>> {
+    async pub fn serve(&mut self) -> Result<(), Box<dyn Error>> {
         info!("Serving Connections...");
         loop {
             if let Ok((stream, _remote)) = self.listener.accept() {
                     // TODO Optimize this
                     let mut client = SOCKClient::new(stream, self.users.clone(), self.auth_methods.clone());
-                    thread::spawn(move || {
+                    tokio::spawn(async move {
                         match client.init() {
                             Ok(_) => {},
                             Err(error) => {

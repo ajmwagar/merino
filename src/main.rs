@@ -40,7 +40,8 @@ struct Opt {
 
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     println!("{}", LOGO);
 
     let opt = Opt::from_args();
