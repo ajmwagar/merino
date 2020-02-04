@@ -9,12 +9,15 @@ authors = ["Avery Wagar <ajmw.subs@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-# openssl = { version = "0.10", features = ["vendored"] }
-# rayon = "1.0"
+tokio = { version = "0.2", features = ["tcp", "udp", "macros", "rt-threaded"] }
+openssl = { version = "0.10", features = ["vendored"] }
+
 pretty_env_logger = "0.3.0"
 log = "0.4.6"
+
 structopt = "0.2"
+
 snafu = "0.4.1"
 csv = "1"
-serde = "1"
-serde_derive = "1"
+
+serde = { version = "1", features = ["derive"] }
