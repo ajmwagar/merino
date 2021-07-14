@@ -1,13 +1,14 @@
 #![forbid(unsafe_code)]
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
-use structopt::StructOpt;
 use merino::*;
+use std::env;
 use std::error::Error;
 use std::path::PathBuf;
-use std::env;
+use structopt::StructOpt;
 
-/// Logo to be printed at when merino is run 
+/// Logo to be printed at when merino is run
 const LOGO: &str = r"
                       _
   _ __ ___   ___ _ __(_)_ __   ___
@@ -37,7 +38,6 @@ struct Opt {
     #[structopt(short = "u", long = "users", parse(from_os_str))]
     /// CSV File with username/password pairs
     users: Option<PathBuf>,
-
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -59,7 +59,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut auth_methods: Vec<u8> = Vec::new();
 
     // Allow unauthenticated connections
-    if opt.no_auth { auth_methods.push(merino::AuthMethods::NoAuth as u8); }
+    if opt.no_auth {
+        auth_methods.push(merino::AuthMethods::NoAuth as u8);
+    }
 
     // Enable username/password auth
     let authed_users: Result<Vec<User>, Box<dyn Error>> = match opt.users {
@@ -68,7 +70,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             let file = std::fs::File::open(users_file)?;
 
             let mut users: Vec<User> = Vec::new();
-
 
             let mut rdr = csv::Reader::from_reader(file);
             for result in rdr.deserialize() {
@@ -79,8 +80,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             Ok(users)
-        },
-        _ => { Ok(Vec::new()) }
+        }
+        _ => Ok(Vec::new()),
     };
 
     let authed_users = authed_users?;
@@ -88,7 +89,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     if auth_methods.is_empty() {
         warn!("No Authentication methods enabled. Clients will not be able to connect!");
     }
-
 
     // Create proxy server
     let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users)?;
