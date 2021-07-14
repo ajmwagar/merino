@@ -266,14 +266,9 @@ impl SOCKClient {
             // debug!("Auth Header: [{}, {}]", header[0], header[1]);
 
             // Username parsing
-            let ulen = header[1];
+            let ulen = header[1] as usize;
 
-            let mut username = Vec::with_capacity(ulen as usize);
-
-            // For some reason the vector needs to actually be full
-            for _ in 0..ulen {
-                username.push(0);
-            }
+            let mut username = vec![0; ulen];
 
             self.stream.read_exact(&mut username)?;
 
@@ -281,7 +276,7 @@ impl SOCKClient {
             let mut plen = [0u8; 1];
             self.stream.read_exact(&mut plen)?;
 
-            let mut password = Vec::with_capacity(plen[0] as usize);
+            let mut password = vec![0; plen[0] as usize];
 
             // For some reason the vector needs to actually be full
             for _ in 0..plen[0] {
@@ -419,14 +414,20 @@ impl SOCKClient {
 
                 // Download Thread
                 thread::spawn(move || {
-                    copy(&mut outbound_in, &mut inbound_out).is_ok();
+                    copy(&mut outbound_in, &mut inbound_out).unwrap_or_else(|e| {
+                        warn!("error while proxy download stream: {:?}", e);
+                        0
+                    });
                     outbound_in.shutdown(Shutdown::Read).unwrap_or(());
                     inbound_out.shutdown(Shutdown::Write).unwrap_or(());
                 });
 
                 // Upload Thread
                 thread::spawn(move || {
-                    copy(&mut inbound_in, &mut outbound_out).is_ok();
+                    copy(&mut inbound_in, &mut outbound_out).unwrap_or_else(|e| {
+                        warn!("error while proxy upload stream: {:?}", e);
+                        0
+                    });
                     inbound_in.shutdown(Shutdown::Read).unwrap_or(());
                     outbound_out.shutdown(Shutdown::Write).unwrap_or(());
                 });
@@ -491,8 +492,8 @@ fn addr_to_socket(
             port,
         ))]),
         AddrType::Domain => {
-            let mut domain = String::from_utf8_lossy(&addr[..]).to_string();
-            domain.push_str(&":");
+            let mut domain = String::from_utf8_lossy(addr).to_string();
+            domain.push_str(":");
             domain.push_str(&port.to_string());
 
             Ok(domain.to_socket_addrs()?.collect())
@@ -524,6 +525,7 @@ fn pretty_print_addr(addr_type: &AddrType, addr: &[u8]) -> String {
 }
 
 /// Proxy User Request
+#[allow(dead_code)]
 struct SOCKSReq {
     pub version: u8,
     pub command: SockCommand,
@@ -568,12 +570,8 @@ impl SOCKSReq {
         }
 
         // Get command
-        let mut command: SockCommand = SockCommand::Connect;
-        match SockCommand::from(packet[1] as usize) {
-            Some(com) => {
-                command = com;
-                Ok(())
-            }
+        let command = match SockCommand::from(packet[1] as usize) {
+            Some(com) => Ok(com),
             None => {
                 warn!("Invalid Command");
                 stream.shutdown(Shutdown::Both)?;
@@ -583,12 +581,8 @@ impl SOCKSReq {
 
         // DST.address
 
-        let mut addr_type: AddrType = AddrType::V6;
-        match AddrType::from(packet[3] as usize) {
-            Some(addr) => {
-                addr_type = addr;
-                Ok(())
-            }
+        let addr_type = match AddrType::from(packet[3] as usize) {
+            Some(addr) => Ok(addr),
             None => {
                 error!("No Addr");
                 stream.shutdown(Shutdown::Both)?;
