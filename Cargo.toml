@@ -19,3 +19,4 @@ csv = "1"
 serde = "1"
 serde_derive = "1"
 tokio = { version = "1", features = ["full"] }
+thiserror = "1"
