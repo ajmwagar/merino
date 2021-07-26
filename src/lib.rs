@@ -10,6 +10,7 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSoc
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 
 /// Version of socks
 const SOCKS_VERSION: u8 = 0x05;
@@ -191,8 +192,8 @@ pub enum AuthMethods {
 
 pub struct Merino {
     listener: TcpListener,
-    users: Vec<User>,
-    auth_methods: Vec<u8>,
+    users: Arc<Vec<User>>,
+    auth_methods: Arc<Vec<u8>>,
 }
 
 impl Merino {
@@ -206,8 +207,8 @@ impl Merino {
         info!("Listening on {}:{}", ip, port);
         Ok(Merino {
             listener: TcpListener::bind((ip, port)).await?,
-            auth_methods,
-            users,
+            auth_methods: Arc::new(auth_methods),
+            users: Arc::new(users),
         })
     }
 
@@ -241,14 +242,14 @@ impl Merino {
 struct SOCKClient {
     stream: TcpStream,
     auth_nmethods: u8,
-    auth_methods: Vec<u8>,
-    authed_users: Vec<User>,
+    auth_methods: Arc<Vec<u8>>,
+    authed_users: Arc<Vec<User>>,
     socks_version: u8,
 }
 
 impl SOCKClient {
     /// Create a new SOCKClient
-    pub fn new(stream: TcpStream, authed_users: Vec<User>, auth_methods: Vec<u8>) -> Self {
+    pub fn new(stream: TcpStream, authed_users: Arc<Vec<User>>, auth_methods: Arc<Vec<u8>>) -> Self {
         SOCKClient {
             stream,
             auth_nmethods: 0,
