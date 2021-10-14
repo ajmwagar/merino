@@ -7,10 +7,12 @@ use snafu::Snafu;
 
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
-use thiserror::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
 use std::sync::Arc;
+use std::time::Duration;
+use thiserror::Error;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::time::timeout;
 
 /// Version of socks
 const SOCKS_VERSION: u8 = 0x05;
@@ -23,7 +25,7 @@ pub struct User {
     password: String,
 }
 
-struct SocksReply {
+pub struct SocksReply {
     // From rfc 1928 (S6),
     // the server evaluates the request, and returns a reply formed as follows:
     //
@@ -59,7 +61,7 @@ struct SocksReply {
 }
 
 impl SocksReply {
-    fn new(status: ResponseCode) -> Self {
+    pub fn new(status: ResponseCode) -> Self {
         let buf = [
             // VER
             SOCKS_VERSION,
@@ -81,14 +83,17 @@ impl SocksReply {
         Self { buf }
     }
 
-    async fn send(&self, stream: &mut TcpStream) -> io::Result<()> {
+    pub async fn send<T>(&self, stream: &mut T) -> io::Result<()>
+    where
+        T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
         stream.write_all(&self.buf[..]).await?;
         Ok(())
     }
 }
 
 #[derive(Error, Debug)]
-enum MerinoError {
+pub enum MerinoError {
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
 
@@ -98,7 +103,7 @@ enum MerinoError {
 
 #[derive(Debug, Snafu)]
 /// Possible SOCKS5 Response Codes
-enum ResponseCode {
+pub enum ResponseCode {
     Success = 0x00,
     #[snafu(display("SOCKS5 Server Failure"))]
     Failure = 0x01,
@@ -194,6 +199,8 @@ pub struct Merino {
     listener: TcpListener,
     users: Arc<Vec<User>>,
     auth_methods: Arc<Vec<u8>>,
+    // Timeout for connections
+    timeout: Option<Duration>,
 }
 
 impl Merino {
@@ -203,12 +210,14 @@ impl Merino {
         ip: &str,
         auth_methods: Vec<u8>,
         users: Vec<User>,
+        timeout: Option<Duration>,
     ) -> io::Result<Self> {
         info!("Listening on {}:{}", ip, port);
         Ok(Merino {
             listener: TcpListener::bind((ip, port)).await?,
             auth_methods: Arc::new(auth_methods),
             users: Arc::new(users),
+            timeout,
         })
     }
 
@@ -217,8 +226,9 @@ impl Merino {
         while let Ok((stream, client_addr)) = self.listener.accept().await {
             let users = self.users.clone();
             let auth_methods = self.auth_methods.clone();
+            let timeout = self.timeout.clone();
             tokio::spawn(async move {
-                let mut client = SOCKClient::new(stream, users, auth_methods);
+                let mut client = SOCKClient::new(stream, users, auth_methods, timeout);
                 match client.init().await {
                     Ok(_) => {}
                     Err(error) => {
@@ -239,24 +249,57 @@ impl Merino {
     }
 }
 
-struct SOCKClient {
-    stream: TcpStream,
+pub struct SOCKClient<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
+    stream: T,
     auth_nmethods: u8,
     auth_methods: Arc<Vec<u8>>,
     authed_users: Arc<Vec<User>>,
     socks_version: u8,
+    timeout: Option<Duration>,
 }
 
-impl SOCKClient {
+impl<T> SOCKClient<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
     /// Create a new SOCKClient
-    pub fn new(stream: TcpStream, authed_users: Arc<Vec<User>>, auth_methods: Arc<Vec<u8>>) -> Self {
+    pub fn new(
+        stream: T,
+        authed_users: Arc<Vec<User>>,
+        auth_methods: Arc<Vec<u8>>,
+        timeout: Option<Duration>,
+    ) -> Self {
         SOCKClient {
             stream,
             auth_nmethods: 0,
             socks_version: 0,
             authed_users,
             auth_methods,
+            timeout,
         }
+    }
+
+    /// Create a new SOCKClient with no auth
+    pub fn new_no_auth(stream: T, timeout: Option<Duration>) -> Self {
+        // FIXME: use option here
+        let authed_users: Arc<Vec<User>> = Arc::new(Vec::new());
+        let mut no_auth: Vec<u8> = Vec::new();
+        no_auth.push(AuthMethods::NoAuth as u8);
+        let auth_methods: Arc<Vec<u8>> = Arc::new(no_auth);
+
+        SOCKClient {
+            stream,
+            auth_nmethods: 0,
+            socks_version: 0,
+            authed_users,
+            auth_methods,
+            timeout,
+        }
+    }
+
+    /// Mutable getter for inner stream
+    pub fn stream_mut(&mut self) -> &mut T {
+        &mut self.stream
     }
 
     /// Check if username + password pair are valid
@@ -270,8 +313,8 @@ impl SOCKClient {
         Ok(())
     }
 
-    async fn init(&mut self) -> Result<(), MerinoError> {
-        debug!("New connection from: {}", self.stream.peer_addr()?.ip());
+    pub async fn init(&mut self) -> Result<(), MerinoError> {
+        debug!("New connection");
         let mut header = [0u8; 2];
         // Read a byte from the stream and determine the version being requested
         self.stream.read_exact(&mut header).await?;
@@ -302,7 +345,7 @@ impl SOCKClient {
     }
 
     async fn auth(&mut self) -> Result<(), MerinoError> {
-        debug!("Authenticating w/ {}", self.stream.peer_addr()?.ip());
+        debug!("Authenticating");
         // Get valid auth methods
         let methods = self.get_avalible_methods().await?;
         trace!("methods: {:?}", methods);
@@ -371,6 +414,7 @@ impl SOCKClient {
             response[1] = AuthMethods::NoAuth as u8;
             debug!("Sending NOAUTH packet");
             self.stream.write_all(&response).await?;
+            debug!("NOAUTH sent");
             Ok(())
         } else {
             warn!("Client has no suitable Auth methods!");
@@ -384,10 +428,8 @@ impl SOCKClient {
 
     /// Handles a client
     pub async fn handle_client(&mut self) -> Result<usize, MerinoError> {
-        debug!("Handling requests for {}", self.stream.peer_addr()?.ip());
-        // Read request
-        // loop {
-        // Parse Request
+        debug!("Starting to relay data");
+
         let req = SOCKSReq::from_stream(&mut self.stream).await?;
 
         if req.addr_type == AddrType::V6 {}
@@ -395,11 +437,8 @@ impl SOCKClient {
         // Log Request
         let displayed_addr = pretty_print_addr(&req.addr_type, &req.addr);
         info!(
-            "New Request: Source: {}, Command: {:?} Addr: {}, Port: {}",
-            self.stream.peer_addr()?.ip(),
-            req.command,
-            displayed_addr,
-            req.port
+            "New Request: Command: {:?} Addr: {}, Port: {}",
+            req.command, displayed_addr, req.port
         );
 
         // Respond
@@ -412,7 +451,21 @@ impl SOCKClient {
 
                 trace!("Connecting to: {:?}", sock_addr);
 
-                let mut target = TcpStream::connect(&sock_addr[..]).await?;
+                let time_out = if let Some(time_out) = self.timeout {
+                    time_out
+                } else {
+                    Duration::from_millis(50)
+                };
+
+                let mut target =
+                    timeout(
+                        time_out,
+                        async move { TcpStream::connect(&sock_addr[..]).await },
+                    )
+                    .await
+                    .map_err(|_| MerinoError::Socks(ResponseCode::AddrTypeNotSupported))
+                    .map_err(|_| MerinoError::Socks(ResponseCode::AddrTypeNotSupported))??;
+
                 trace!("Connected!");
 
                 SocksReply::new(ResponseCode::Success)
@@ -531,7 +584,10 @@ struct SOCKSReq {
 
 impl SOCKSReq {
     /// Parse a SOCKS Req from a TcpStream
-    async fn from_stream(stream: &mut TcpStream) -> Result<Self, MerinoError> {
+    async fn from_stream<T>(stream: &mut T) -> Result<Self, MerinoError>
+    where
+        T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
         // From rfc 1928 (S4), the SOCKS request is formed as follows:
         //
         //    +----+-----+-------+------+----------+----------+
@@ -555,9 +611,11 @@ impl SOCKSReq {
         //      o  DST.ADDR       desired destination address
         //      o  DST.PORT desired destination port in network octet
         //         order
+        trace!("Server waiting for connect");
         let mut packet = [0u8; 4];
         // Read a byte from the stream and determine the version being requested
         stream.read_exact(&mut packet).await?;
+        trace!("Server received {:?}", packet);
 
         if packet[0] != SOCKS_VERSION {
             warn!("from_stream Unsupported version: SOCKS{}", packet[0]);
