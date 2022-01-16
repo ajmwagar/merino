@@ -27,7 +27,7 @@ const LOGO: &str = r"
         .args(&["no-auth", "users"]),
 ), group(
     ArgGroup::new("log")
-        .args(&["verbosity", "quite"]),
+        .args(&["verbosity", "quiet"]),
 ))]
 struct Opt {
     #[clap(short, long, default_value_t = 1080)]
@@ -53,7 +53,7 @@ struct Opt {
 
     /// Do not output any logs (even errors!). Overrides `RUST_LOG`
     #[clap(short)]
-    quite: bool,
+    quiet: bool,
 }
 
 #[tokio::main]
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         env::set_var("RUST_LOG", level);
     }
 
-    if !opt.quite {
+    if !opt.quiet {
         pretty_env_logger::init_timed();
     }
 
