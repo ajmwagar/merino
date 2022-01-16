@@ -488,7 +488,7 @@ fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> io::Result<Ve
         ))]),
         AddrType::Domain => {
             let mut domain = String::from_utf8_lossy(addr).to_string();
-            domain.push_str(":");
+            domain.push(':');
             domain.push_str(&port.to_string());
 
             Ok(domain.to_socket_addrs()?.collect())

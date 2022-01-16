@@ -111,7 +111,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 users.push(record);
             }
 
-            if users.len() == 0 {
+            if users.is_empty() {
                 error!(
                     "No users loaded from {:?}. Check configuration.",
                     &users_file
