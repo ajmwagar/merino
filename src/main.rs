@@ -6,7 +6,7 @@ use merino::*;
 use std::env;
 use std::error::Error;
 use std::path::PathBuf;
-use structopt::StructOpt;
+use clap::{ArgGroup, Parser};
 
 /// Logo to be printed at when merino is run
 const LOGO: &str = r"
@@ -19,23 +19,27 @@ const LOGO: &str = r"
  A SOCKS5 Proxy server written in Rust
 ";
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "merino")]
-/// A SOCKS5 Proxy written in Rust
+#[derive(Parser, Debug)]
+#[clap(version)]
+#[clap(group(
+    ArgGroup::new("auth")
+        .required(true)
+        .args(&["no-auth", "users"]),
+))]
 struct Opt {
-    #[structopt(short = "p", long = "port", default_value = "1080")]
+    #[clap(short, long, default_value_t = 1080)]
     /// Set port to listen on
     port: u16,
 
-    #[structopt(short = "i", long = "ip", default_value = "127.0.0.1")]
+    #[clap(short, long, default_value = "127.0.0.1")]
     /// Set ip to listen on
     ip: String,
 
-    #[structopt(long = "no-auth")]
+    #[clap(long)]
     /// Allow unauthenticated connections
     no_auth: bool,
 
-    #[structopt(short = "u", long = "users", parse(from_os_str))]
+    #[clap(short, long)]
     /// CSV File with username/password pairs
     users: Option<PathBuf>,
 }
@@ -44,7 +48,7 @@ struct Opt {
 async fn main() -> Result<(), Box<dyn Error>> {
     println!("{}", LOGO);
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     // Setup logging
 
@@ -86,10 +90,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let authed_users = authed_users?;
-
-    if auth_methods.is_empty() {
-        warn!("No Authentication methods enabled. Clients will not be able to connect!");
-    }
 
     // Create proxy server
     let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users).await?;
