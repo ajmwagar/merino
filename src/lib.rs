@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream, lookup_host};
 use tokio::time::timeout;
 
 /// Version of socks
@@ -441,7 +441,7 @@ where
             SockCommand::Connect => {
                 debug!("Handling CONNECT Command");
 
-                let sock_addr = addr_to_socket(&req.addr_type, &req.addr, req.port)?;
+                let sock_addr = addr_to_socket(&req.addr_type, &req.addr, req.port).await?;
 
                 trace!("Connecting to: {:?}", sock_addr);
 
@@ -503,7 +503,7 @@ where
 }
 
 /// Convert an address and AddrType to a SocketAddr
-fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> io::Result<Vec<SocketAddr>> {
+async fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> io::Result<Vec<SocketAddr>> {
     match addr_type {
         AddrType::V6 => {
             let new_addr = (0..8)
@@ -535,10 +535,10 @@ fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> io::Result<Ve
         ))]),
         AddrType::Domain => {
             let mut domain = String::from_utf8_lossy(addr).to_string();
-            domain.push_str(":");
+            domain.push(':');
             domain.push_str(&port.to_string());
 
-            Ok(domain.to_socket_addrs()?.collect())
+            Ok(lookup_host(domain).await?.collect())
         }
     }
 }
