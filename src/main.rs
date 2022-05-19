@@ -25,6 +25,9 @@ const LOGO: &str = r"
     ArgGroup::new("auth")
         .required(true)
         .args(&["no-auth", "users"]),
+), group(
+    ArgGroup::new("log")
+        .args(&["verbosity", "quiet"]),
 ))]
 struct Opt {
     #[clap(short, long, default_value_t = 1080)]
@@ -42,6 +45,15 @@ struct Opt {
     #[clap(short, long)]
     /// CSV File with username/password pairs
     users: Option<PathBuf>,
+
+    /// Log verbosity level. -vv for more verbosity.
+    /// Environmental variable `RUST_LOG` overrides this flag!
+    #[clap(short, parse(from_occurrences))]
+    verbosity: u8,
+
+    /// Do not output any logs (even errors!). Overrides `RUST_LOG`
+    #[clap(short)]
+    quiet: bool,
 }
 
 #[tokio::main]
@@ -51,13 +63,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let opt = Opt::parse();
 
     // Setup logging
-
-    //Set the `RUST_LOG` var if none is provided
-    if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", "merino=INFO");
+    let log_env = env::var("RUST_LOG");
+    if log_env.is_err() {
+        let level = match opt.verbosity {
+            1 => "merino=DEBUG",
+            2 => "merino=TRACE",
+            _ => "merino=INFO",
+        };
+        env::set_var("RUST_LOG", level);
     }
 
-    pretty_env_logger::init_timed();
+    if !opt.quiet {
+        pretty_env_logger::init_timed();
+    }
+
+    if log_env.is_ok() && (opt.verbosity != 0) {
+        warn!(
+            "Log level is overriden by environmental variable to `{}`",
+            // It's safe to unwrap() because we checked for is_ok() before
+            log_env.unwrap().as_str()
+        );
+    }
 
     // Setup Proxy settings
 

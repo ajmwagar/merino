@@ -21,7 +21,7 @@
 - Lightweight (Less than 0.6% CPU usage while surfing the web/streaming YouTube)
 - Standalone binary (no system dependencies)
 - `1+ Gb/second` connection speeds (**On Gigabit LAN network over ethernet. Results may vary!**)
-- Tunable logging (try `export RUST_LOG=merino=DEBUG`)
+- Tunable logging (by flags or `RUST_LOG` environmental variable)
 - `SOCKS5` Compatible Authentication methods:
   - `NoAuth`
   - Username & Password
