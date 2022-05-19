@@ -1,12 +1,15 @@
 #![forbid(unsafe_code)]
+#![cfg_attr(not(debug_assertions), deny(warnings))]
+#![warn(clippy::all, rust_2018_idioms)]
 #[macro_use]
 extern crate log;
 
+use clap::{ArgGroup, Parser};
 use merino::*;
 use std::env;
 use std::error::Error;
+use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
-use clap::{ArgGroup, Parser};
 
 /// Logo to be printed at when merino is run
 const LOGO: &str = r"
@@ -37,6 +40,10 @@ struct Opt {
     #[clap(short, long, default_value = "127.0.0.1")]
     /// Set ip to listen on
     ip: String,
+
+    #[clap(long)]
+    /// Allow insecure configuration
+    allow_insecure: bool,
 
     #[clap(long)]
     /// Allow unauthenticated connections
@@ -98,16 +105,46 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let authed_users: Result<Vec<User>, Box<dyn Error>> = match opt.users {
         Some(users_file) => {
             auth_methods.push(AuthMethods::UserPass as u8);
-            let file = std::fs::File::open(users_file)?;
+            let file = std::fs::File::open(&users_file).unwrap_or_else(|e| {
+                error!("Can't open file {:?}: {}", &users_file, e);
+                std::process::exit(1);
+            });
+
+            let metadata = file.metadata()?;
+            // 7 is (S_IROTH | S_IWOTH | S_IXOTH) or the "permisions for others" in unix
+            if (metadata.mode() & 7) > 0 && !opt.allow_insecure {
+                error!(
+                    "Permissions {:o} for {:?} are too open. \
+                    It is recommended that your users file is NOT accessible by others. \
+                    To override this check, set --allow-insecure",
+                    metadata.mode() & 0o777,
+                    &users_file
+                );
+                std::process::exit(1);
+            }
 
             let mut users: Vec<User> = Vec::new();
 
             let mut rdr = csv::Reader::from_reader(file);
             for result in rdr.deserialize() {
-                let record: User = result?;
+                let record: User = match result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        error!("{}", e);
+                        std::process::exit(1);
+                    }
+                };
 
                 trace!("Loaded user: {}", record.username);
                 users.push(record);
+            }
+
+            if users.is_empty() {
+                error!(
+                    "No users loaded from {:?}. Check configuration.",
+                    &users_file
+                );
+                std::process::exit(1);
             }
 
             Ok(users)

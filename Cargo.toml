@@ -13,14 +13,12 @@ opt-level = 3
 lto = true
 
 [dependencies]
-# openssl = { version = "0.10", features = ["vendored"] }
-# rayon = "1.0"
-pretty_env_logger = "0.3.0"
-log = "0.4.6"
 clap = { version = "3.0.7", features = ["derive"] }
-snafu = "0.4.1"
-csv = "1"
-serde = "1"
-serde_derive = "1"
-tokio = { version = "1", features = ["full"] }
-thiserror = "1"
+csv = "1.1.6"
+log = "0.4.14"
+pretty_env_logger = "0.4.0"
+serde = "1.0.133"
+serde_derive = "1.0.133"
+snafu = "0.7.0"
+thiserror = "1.0.30"
+tokio = { version = "1.15.0", features = ["full"] }
