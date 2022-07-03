@@ -457,8 +457,7 @@ where
                         async move { TcpStream::connect(&sock_addr[..]).await },
                     )
                     .await
-                    .map_err(|_| MerinoError::Socks(ResponseCode::AddrTypeNotSupported))
-                    .map_err(|_| MerinoError::Socks(ResponseCode::AddrTypeNotSupported))??;
+                    .map_err(|_| MerinoError::Socks(ResponseCode::ConnectionRefused))??;
 
                 trace!("Connected!");
 
