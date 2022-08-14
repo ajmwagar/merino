@@ -43,6 +43,14 @@ cd merino
 cargo install --path .
 ```
 
+OR
+
+```bash
+git clone https://github.com/ajmwagar/merino
+cd merino
+docker build -t merino .
+```
+
 ### Usage
 
 ```bash
@@ -53,7 +61,13 @@ merino --no-auth
 merino --users users.csv
 
 # Display a help menu
-merino --help 
+merino --help
+```
+
+#### Docker
+
+```bash
+docker run -it -p 1080:1080 merino --ip 0.0.0.0 --no-auth
 ```
 
 # 🚥 Roadmap
