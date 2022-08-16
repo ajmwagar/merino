@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, lookup_host};
+use tokio::net::{lookup_host, TcpListener, TcpSocket, TcpStream};
 use tokio::time::timeout;
 
 /// Version of socks
@@ -199,8 +199,10 @@ pub struct Merino {
     listener: TcpListener,
     users: Arc<Vec<User>>,
     auth_methods: Arc<Vec<u8>>,
-    // Timeout for connections
+    /// Timeout for connections
     timeout: Option<Duration>,
+    /// Optional outgoing IP address
+    out_addr: Option<SocketAddr>,
 }
 
 impl Merino {
@@ -211,6 +213,7 @@ impl Merino {
         auth_methods: Vec<u8>,
         users: Vec<User>,
         timeout: Option<Duration>,
+        out_addr: Option<SocketAddr>,
     ) -> io::Result<Self> {
         info!("Listening on {}:{}", ip, port);
         Ok(Merino {
@@ -218,6 +221,7 @@ impl Merino {
             auth_methods: Arc::new(auth_methods),
             users: Arc::new(users),
             timeout,
+            out_addr,
         })
     }
 
@@ -227,8 +231,9 @@ impl Merino {
             let users = self.users.clone();
             let auth_methods = self.auth_methods.clone();
             let timeout = self.timeout.clone();
+            let out_addr = self.out_addr.clone();
             tokio::spawn(async move {
-                let mut client = SOCKClient::new(stream, users, auth_methods, timeout);
+                let mut client = SOCKClient::new(stream, users, auth_methods, timeout, out_addr);
                 match client.init().await {
                     Ok(_) => {}
                     Err(error) => {
@@ -256,6 +261,7 @@ pub struct SOCKClient<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
     authed_users: Arc<Vec<User>>,
     socks_version: u8,
     timeout: Option<Duration>,
+    out_addr: Option<SocketAddr>,
 }
 
 impl<T> SOCKClient<T>
@@ -268,6 +274,7 @@ where
         authed_users: Arc<Vec<User>>,
         auth_methods: Arc<Vec<u8>>,
         timeout: Option<Duration>,
+        out_addr: Option<SocketAddr>,
     ) -> Self {
         SOCKClient {
             stream,
@@ -276,11 +283,12 @@ where
             authed_users,
             auth_methods,
             timeout,
+            out_addr,
         }
     }
 
     /// Create a new SOCKClient with no auth
-    pub fn new_no_auth(stream: T, timeout: Option<Duration>) -> Self {
+    pub fn new_no_auth(stream: T, timeout: Option<Duration>, out_addr: Option<SocketAddr>) -> Self {
         // FIXME: use option here
         let authed_users: Arc<Vec<User>> = Arc::new(Vec::new());
         let mut no_auth: Vec<u8> = Vec::new();
@@ -294,6 +302,7 @@ where
             authed_users,
             auth_methods,
             timeout,
+            out_addr,
         }
     }
 
@@ -451,16 +460,16 @@ where
                     Duration::from_millis(50)
                 };
 
-                let mut target =
-                    timeout(
-                        time_out,
-                        async move { TcpStream::connect(&sock_addr[..]).await },
-                    )
+                let mut target = timeout(time_out, async { self.connect(&sock_addr).await })
                     .await
                     .map_err(|_| MerinoError::Socks(ResponseCode::AddrTypeNotSupported))
                     .map_err(|_| MerinoError::Socks(ResponseCode::AddrTypeNotSupported))??;
 
-                trace!("Connected!");
+                trace!(
+                    "Connected: {:?} <=> {:?}",
+                    target.local_addr(),
+                    target.peer_addr()
+                );
 
                 SocksReply::new(ResponseCode::Success)
                     .send(&mut self.stream)
@@ -485,6 +494,36 @@ where
                 std::io::ErrorKind::Unsupported,
                 "UdpAssosiate not supported",
             ))),
+        }
+    }
+
+    async fn connect(&self, addrs: &Vec<SocketAddr>) -> io::Result<TcpStream> {
+        match self.out_addr {
+            Some(out_addr) => {
+                let mut last_err = None;
+
+                for addr in addrs {
+                    let socket = match out_addr {
+                        SocketAddr::V4(_) => TcpSocket::new_v4()?,
+                        SocketAddr::V6(_) => TcpSocket::new_v6()?,
+                    };
+
+                    socket.bind(out_addr)?;
+
+                    match socket.connect(addr.clone()).await {
+                        Ok(stream) => return Ok(stream),
+                        Err(e) => last_err = Some(e),
+                    }
+                }
+
+                Err(last_err.unwrap_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "Can't connect to any address",
+                    )
+                }))
+            }
+            None => TcpStream::connect(&addrs[..]).await,
         }
     }
 
