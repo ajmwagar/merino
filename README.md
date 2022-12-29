@@ -56,6 +56,26 @@ merino --users users.csv
 merino --help 
 ```
 
+## 🐳 Docker build & Usage
+
+### Build
+
+```bash
+docker build -t merino .
+```
+
+### Usage
+```bash
+# Start a SOCKS5 Proxy server listening on port 1080 without authentication
+docker run -p 1080:1080 merino -i 0.0.0.0 --no-auth
+
+# Use username/password authentication and read users from users.csv
+docker run -v $(pwd)/users.csv:/users.csv -p 1080:1080 merino -i 0.0.0.0 --users /users.csv --allow-insecure
+
+# Display a help menu
+docker run --rm merino --help
+```
+
 # 🚥 Roadmap
 
 - [x] IPV6 Support
