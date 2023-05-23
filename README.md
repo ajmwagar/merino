@@ -43,6 +43,12 @@ cd merino
 cargo install --path .
 ```
 
+OR
+
+```bash
+docker image pull ghcr.io/ajmwagar/merino:latest
+```
+
 ### Usage
 
 ```bash
@@ -53,21 +59,27 @@ merino --no-auth
 merino --users users.csv
 
 # Display a help menu
-merino --help 
+merino --help
+```
+
+OR
+
+```bash
+docker container run --pull=always --name=merino -p=8001:8001 ghcr.io/ajmwagar/merino:latest --no-auth --port=8001
 ```
 
 # 🚥 Roadmap
 
 - [x] IPV6 Support
 - [ ] `SOCKS5` Authentication Methods
-  - [x] `NOAUTH` 
+  - [x] `NOAUTH`
   - [x] `USERPASS`
   - [ ] `GSSAPI` Coming Soon!
 - [ ] Custom plugin/middleware support
 - [ ] `SOCKS5` Commands
   - [x] `CONNECT`
   - [ ] `BIND`
-  - [ ] `ASSOCIATE` 
+  - [ ] `ASSOCIATE`
 - [ ] Benchmarks & Unit tests
 - [ ] [Actix](https://github.com/actix-rs/actix) based backend
 - [ ] `SOCKS4`/`SOCKS4a` Support
