@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build_and_upload_image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Log in to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build and Push
+        uses: docker/build-push-action@v4
+        with:
+          # linux/amd64 supports all x86 CPUs
+          # linux/amd64/v2 supports x86 CPUs from 2010+
+          # linux/amd64/v3 supports x86 CPUs from 2015+
+          # https://en.wikipedia.org/wiki/X86-64#Microarchitecture_levels
+          platforms: linux/amd64,linux/amd64/v2,linux/amd64/v3,linux/arm64
+          pull: true
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          # mode=max means "cache everything possible". This ensures maximum
+          # use of the cache, but will use up GitHub's 10 GB cache size limit
+          # faster.
+          cache-to: type=gha,mode=max
