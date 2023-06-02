@@ -121,6 +121,8 @@ pub enum ResponseCode {
     CommandNotSupported = 0x07,
     #[snafu(display("Addr Type not supported"))]
     AddrTypeNotSupported = 0x08,
+    #[snafu(display("Timeout"))]
+    Timeout = 0x99,
 }
 
 impl From<MerinoError> for ResponseCode {
@@ -200,7 +202,7 @@ pub struct Merino {
     users: Arc<Vec<User>>,
     auth_methods: Arc<Vec<u8>>,
     // Timeout for connections
-    timeout: Option<Duration>,
+    timeout: Duration,
 }
 
 impl Merino {
@@ -210,7 +212,7 @@ impl Merino {
         ip: &str,
         auth_methods: Vec<u8>,
         users: Vec<User>,
-        timeout: Option<Duration>,
+        timeout: Duration,
     ) -> io::Result<Self> {
         info!("Listening on {}:{}", ip, port);
         Ok(Merino {
@@ -255,7 +257,7 @@ pub struct SOCKClient<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
     auth_methods: Arc<Vec<u8>>,
     authed_users: Arc<Vec<User>>,
     socks_version: u8,
-    timeout: Option<Duration>,
+    timeout: Duration,
 }
 
 impl<T> SOCKClient<T>
@@ -267,7 +269,7 @@ where
         stream: T,
         authed_users: Arc<Vec<User>>,
         auth_methods: Arc<Vec<u8>>,
-        timeout: Option<Duration>,
+        timeout: Duration,
     ) -> Self {
         SOCKClient {
             stream,
@@ -280,7 +282,7 @@ where
     }
 
     /// Create a new SOCKClient with no auth
-    pub fn new_no_auth(stream: T, timeout: Option<Duration>) -> Self {
+    pub fn new_no_auth(stream: T, timeout: Duration) -> Self {
         // FIXME: use option here
         let authed_users: Arc<Vec<User>> = Arc::new(Vec::new());
         let mut no_auth: Vec<u8> = Vec::new();
@@ -445,20 +447,14 @@ where
 
                 trace!("Connecting to: {:?}", sock_addr);
 
-                let time_out = if let Some(time_out) = self.timeout {
-                    time_out
-                } else {
-                    Duration::from_millis(50)
-                };
-
                 let mut target =
                     timeout(
-                        time_out,
+                        self.timeout,
                         async move { TcpStream::connect(&sock_addr[..]).await },
                     )
                     .await
-                    .map_err(|_| MerinoError::Socks(ResponseCode::AddrTypeNotSupported))
-                    .map_err(|_| MerinoError::Socks(ResponseCode::AddrTypeNotSupported))??;
+                    .map_err(|_| MerinoError::Socks(ResponseCode::Timeout))
+                    .map_err(|_| MerinoError::Socks(ResponseCode::Timeout))??;
 
                 trace!("Connected!");
 
@@ -509,7 +505,7 @@ async fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> io::Res
             let new_addr = (0..8)
                 .map(|x| {
                     trace!("{} and {}", x * 2, (x * 2) + 1);
-                    (u16::from(addr[(x * 2)]) << 8) | u16::from(addr[(x * 2) + 1])
+                    (u16::from(addr[x * 2]) << 8) | u16::from(addr[(x * 2) + 1])
                 })
                 .collect::<Vec<u16>>();
 
@@ -554,7 +550,7 @@ fn pretty_print_addr(addr_type: &AddrType, addr: &[u8]) -> String {
             .join("."),
         AddrType::V6 => {
             let addr_16 = (0..8)
-                .map(|x| (u16::from(addr[(x * 2)]) << 8) | u16::from(addr[(x * 2) + 1]))
+                .map(|x| (u16::from(addr[x * 2]) << 8) | u16::from(addr[(x * 2) + 1]))
                 .collect::<Vec<u16>>();
 
             addr_16
