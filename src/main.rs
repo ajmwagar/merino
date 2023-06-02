@@ -8,8 +8,8 @@ use clap::{ArgGroup, Parser};
 use merino::*;
 use std::env;
 use std::error::Error;
-use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// Logo to be printed at when merino is run
 const LOGO: &str = r"
@@ -53,6 +53,10 @@ struct Opt {
     /// CSV File with username/password pairs
     users: Option<PathBuf>,
 
+    #[clap(short, long, default_value_t = 1000)]
+    /// Timeout in miliseconds
+    timeout: u64,
+
     /// Log verbosity level. -vv for more verbosity.
     /// Environmental variable `RUST_LOG` overrides this flag!
     #[clap(short, parse(from_occurrences))]
@@ -61,6 +65,36 @@ struct Opt {
     /// Do not output any logs (even errors!). Overrides `RUST_LOG`
     #[clap(short)]
     quiet: bool,
+}
+
+#[cfg(target_family = "unix")]
+pub mod details {
+    use std::os::unix::prelude::MetadataExt;
+  
+    // Define structs, functions, ...
+    pub fn metadata_platform(metadata:std::fs::Metadata, allow_insecure:&bool, users_file:&std::path::PathBuf) {
+        // 7 is (S_IROTH | S_IWOTH | S_IXOTH) or the "permisions for others" in unix
+        if (metadata.mode() & 7) > 0 && !allow_insecure {
+            error!(
+                "Permissions {:o} for {:?} are too open. \
+                It is recommended that your users file is NOT accessible by others. \
+                To override this check, set --allow-insecure",
+                metadata.mode() & 0o777,
+                &users_file
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(target_family = "windows")]
+pub mod details {
+    // use std::os::windows::prelude::MetadataExt;
+
+    // Define structs, functions, ...
+    pub fn metadata_platform(_metadata:std::fs::Metadata, _allow_insecure:&bool, _users_file:&std::path::PathBuf) {
+        println!("On windows there is no metadata.mode()");
+    }
 }
 
 #[tokio::main]
@@ -111,17 +145,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             });
 
             let metadata = file.metadata()?;
-            // 7 is (S_IROTH | S_IWOTH | S_IXOTH) or the "permisions for others" in unix
-            if (metadata.mode() & 7) > 0 && !opt.allow_insecure {
-                error!(
-                    "Permissions {:o} for {:?} are too open. \
-                    It is recommended that your users file is NOT accessible by others. \
-                    To override this check, set --allow-insecure",
-                    metadata.mode() & 0o777,
-                    &users_file
-                );
-                std::process::exit(1);
-            }
+            details::metadata_platform(metadata,&opt.allow_insecure,&users_file);
 
             let mut users: Vec<User> = Vec::new();
 
@@ -154,8 +178,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let authed_users = authed_users?;
 
+    let timeout = Duration::from_millis(opt.timeout);
+
     // Create proxy server
-    let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users, None).await?;
+    let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users, timeout).await?;
 
     // Start Proxies
     merino.serve().await;
