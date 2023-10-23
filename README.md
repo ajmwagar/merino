@@ -81,5 +81,5 @@ docker container run --pull=always --name=merino -p=8001:8001 ghcr.io/ajmwagar/m
   - [ ] `BIND`
   - [ ] `ASSOCIATE`
 - [ ] Benchmarks & Unit tests
-- [ ] [Actix](https://github.com/actix-rs/actix) based backend
+- [ ] [Actix](https://github.com/actix/actix-web) based backend
 - [ ] `SOCKS4`/`SOCKS4a` Support
