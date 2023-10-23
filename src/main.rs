@@ -8,6 +8,7 @@ use clap::{ArgGroup, Parser};
 use merino::*;
 use std::env;
 use std::error::Error;
+use std::net::SocketAddr;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
 
@@ -40,6 +41,10 @@ struct Opt {
     #[clap(short, long, default_value = "127.0.0.1")]
     /// Set ip to listen on
     ip: String,
+
+    #[clap(short, long)]
+    /// Set outgoing ip
+    out_ip: Option<String>,
 
     #[clap(long)]
     /// Allow insecure configuration
@@ -154,8 +159,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let authed_users = authed_users?;
 
+    let out_addr = opt
+        .out_ip
+        .map(|x| x.parse())
+        .transpose()?
+        .map(|ip| SocketAddr::new(ip, 0));
+
     // Create proxy server
-    let mut merino = Merino::new(opt.port, &opt.ip, auth_methods, authed_users, None).await?;
+    let mut merino = Merino::new(
+        opt.port,
+        &opt.ip,
+        auth_methods,
+        authed_users,
+        None,
+        out_addr,
+    )
+    .await?;
 
     // Start Proxies
     merino.serve().await;
