@@ -55,11 +55,11 @@ struct Opt {
 
     /// Log verbosity level. -vv for more verbosity.
     /// Environmental variable `RUST_LOG` overrides this flag!
-    #[clap(short, parse(from_occurrences))]
+    #[clap(short, long, parse(from_occurrences))]
     verbosity: u8,
 
     /// Do not output any logs (even errors!). Overrides `RUST_LOG`
-    #[clap(short)]
+    #[clap(short, long)]
     quiet: bool,
 }
 
