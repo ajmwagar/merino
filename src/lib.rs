@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, lookup_host};
+use tokio::net::{lookup_host, TcpListener, TcpStream};
 use tokio::time::timeout;
 
 /// Version of socks
@@ -57,29 +57,42 @@ pub struct SocksReply {
     //      o  BND.ADDR       server bound address
     //      o  BND.PORT       server bound port in network octet order
     //
-    buf: [u8; 10],
+    buf: Vec<u8>,
 }
 
 impl SocksReply {
-    pub fn new(status: ResponseCode) -> Self {
-        let buf = [
+    pub fn new(status: ResponseCode, socket_addr: Option<SocketAddr>) -> Self {
+        let mut buf = vec![
             // VER
             SOCKS_VERSION,
             // REP
             status as u8,
             // RSV
             RESERVED,
-            // ATYP
-            1,
-            // BND.ADDR
-            0,
-            0,
-            0,
-            0,
-            // BND.PORT
-            0,
-            0,
         ];
+        match socket_addr {
+            Some(SocketAddr::V4(addr)) => {
+                buf.push(AddrType::V4 as u8);
+                // BDN.ADDR
+                buf.extend_from_slice(&addr.ip().octets());
+                // BDN.PORT
+                buf.extend_from_slice(&addr.port().to_be_bytes());
+            }
+            Some(SocketAddr::V6(addr)) => {
+                buf.push(AddrType::V6 as u8);
+                // BDN.ADDR
+                buf.extend_from_slice(&addr.ip().octets());
+                // BDN.PORT
+                buf.extend_from_slice(&addr.port().to_be_bytes());
+            }
+            None => {
+                buf.push(AddrType::V4 as u8);
+                // BDN.ADDR
+                buf.extend_from_slice(&[0, 0, 0, 0]);
+                // BDN.PORT
+                buf.extend_from_slice(&[0, 0]);
+            }
+        }
         Self { buf }
     }
 
@@ -226,7 +239,7 @@ impl Merino {
         while let Ok((stream, client_addr)) = self.listener.accept().await {
             let users = self.users.clone();
             let auth_methods = self.auth_methods.clone();
-            let timeout = self.timeout.clone();
+            let timeout = self.timeout;
             tokio::spawn(async move {
                 let mut client = SOCKClient::new(stream, users, auth_methods, timeout);
                 match client.init().await {
@@ -234,7 +247,9 @@ impl Merino {
                     Err(error) => {
                         error!("Error! {:?}, client: {:?}", error, client_addr);
 
-                        if let Err(e) = SocksReply::new(error.into()).send(&mut client.stream).await
+                        if let Err(e) = SocksReply::new(error.into(), None)
+                            .send(&mut client.stream)
+                            .await
                         {
                             warn!("Failed to send error code: {:?}", e);
                         }
@@ -283,8 +298,7 @@ where
     pub fn new_no_auth(stream: T, timeout: Option<Duration>) -> Self {
         // FIXME: use option here
         let authed_users: Arc<Vec<User>> = Arc::new(Vec::new());
-        let mut no_auth: Vec<u8> = Vec::new();
-        no_auth.push(AuthMethods::NoAuth as u8);
+        let no_auth: Vec<u8> = vec![AuthMethods::NoAuth as u8];
         let auth_methods: Arc<Vec<u8>> = Arc::new(no_auth);
 
         SOCKClient {
@@ -461,7 +475,7 @@ where
 
                 trace!("Connected!");
 
-                SocksReply::new(ResponseCode::Success)
+                SocksReply::new(ResponseCode::Success, Some(target.peer_addr()?))
                     .send(&mut self.stream)
                     .await?;
 
@@ -502,13 +516,17 @@ where
 }
 
 /// Convert an address and AddrType to a SocketAddr
-async fn addr_to_socket(addr_type: &AddrType, addr: &[u8], port: u16) -> io::Result<Vec<SocketAddr>> {
+async fn addr_to_socket(
+    addr_type: &AddrType,
+    addr: &[u8],
+    port: u16,
+) -> io::Result<Vec<SocketAddr>> {
     match addr_type {
         AddrType::V6 => {
             let new_addr = (0..8)
                 .map(|x| {
                     trace!("{} and {}", x * 2, (x * 2) + 1);
-                    (u16::from(addr[(x * 2)]) << 8) | u16::from(addr[(x * 2) + 1])
+                    (u16::from(addr[x * 2]) << 8) | u16::from(addr[(x * 2) + 1])
                 })
                 .collect::<Vec<u16>>();
 
@@ -553,7 +571,7 @@ fn pretty_print_addr(addr_type: &AddrType, addr: &[u8]) -> String {
             .join("."),
         AddrType::V6 => {
             let addr_16 = (0..8)
-                .map(|x| (u16::from(addr[(x * 2)]) << 8) | u16::from(addr[(x * 2) + 1]))
+                .map(|x| (u16::from(addr[x * 2]) << 8) | u16::from(addr[(x * 2) + 1]))
                 .collect::<Vec<u16>>();
 
             addr_16
